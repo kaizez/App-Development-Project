@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block title %}Products - EcoBike Rental{% endblock %}
+
+{% block extra_css %}
+<style>
+    .product-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+        gap: 20px;
+        padding: 20px;
+    }
+    .product-card {
+        border: 1px solid #ddd;
+        padding: 15px;
+        border-radius: 8px;
+    }
+    .product-card h3 {
+        margin-top: 0;
+    }
+    .price {
+        color: #007bff;
+        font-size: 1.2em;
+        font-weight: bold;
+    }
+    .add-to-cart {
+        background-color: #28a745;
+        color: white;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 4px;
+        cursor: pointer;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>Our Products</h1>
+
+<div class="product-grid">
+    {% for product in products %}
+    <div class="product-card">
+        <h3>{{ product.get_name() }}</h3>
+        <p>{{ product.get_description() }}</p>
+        <p class="price">${{ "%.2f"|format(product.get_price()) }}</p>
+        <form action="{{ url_for('add_to_cart', product_id=product.get_product_id()) }}" method="POST">
+            <button type="submit" class="add-to-cart">Add to Cart</button>
+        </form>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

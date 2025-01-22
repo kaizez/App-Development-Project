@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block extra_css %}
+<style>
+    .transaction-item {
+        border: 1px solid #ddd;
+        margin: 10px 0;
+        padding: 15px;
+        border-radius: 5px;
+    }
+
+    .transaction-header {
+        display: flex;
+        justify-content: space-between;
+        border-bottom: 1px solid #eee;
+        padding-bottom: 10px;
+        margin-bottom: 10px;
+    }
+
+    .transaction-details {
+        margin: 10px 0;
+    }
+
+    .items-list {
+        margin-left: 20px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1>Transaction History</h1>
+
+<div class="transaction-history">
+    {% if orders %}
+    {% for order in orders %}
+    <div class="transaction-item">
+        <div class="transaction-header">
+            <div>
+                <strong>Transaction ID:</strong> {{ order.get_order_id() }}
+                <br>
+                <strong>Date:</strong> {{ order.get_order_date().strftime('%d %B %Y, %I:%M %p') }}
+                {% if order.get_rental_dates() %}
+                    {% if order.get_rental_dates().get('start_date') %}
+                        <br>
+                        <strong>Rental Period:</strong> 
+                        {{ order.get_rental_dates()['start_date'] }} to {{ order.get_rental_dates()['end_date'] }}
+                        ({{ order.get_rental_dates()['days'] }} days)
+                    {% endif %}
+                {% endif %}
+            </div>
+            <div>
+                <strong>Total Amount:</strong> ${{ "%.2f"|format(order.get_total()) }}
+            </div>
+        </div>
+
+        <div class="transaction-details">
+            <strong>Shipped to:</strong> {{ order.get_customer_info()['full_name'] }}
+            <br>
+            <strong>Address:</strong>
+            {{ order.get_customer_info()['address'] }},
+            {{ order.get_customer_info()['city'] }},
+            {{ order.get_customer_info()['postal_code'] }}
+        </div>
+
+        <div class="items-list">
+            <strong>Items Purchased:</strong>
+            <ul>
+                {% for item_id, item in order.get_items().items() %}
+                <li>
+                    {{ item['product'].get_name() }}
+                    (Qty: {{ item['quantity'] }}) -
+                    ${{ "%.2f"|format(item['product'].get_price() * item['quantity']) }}
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+
+        <a href="{{ url_for('view_order', order_id=order.get_order_id()) }}">View Full Details</a>
+    </div>
+    {% endfor %}
+    {% else %}
+    <p>No transaction history found.</p>
+    {% endif %}
+</div>
+{% endblock %}
