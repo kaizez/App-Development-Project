@@ -8,6 +8,38 @@ from flask import Flask, render_template, request, redirect, url_for, flash, sen
 from werkzeug.utils import secure_filename
 from myclass import Product, Order, carparks, BikeID
 from math import radians, sin, cos, sqrt, atan2
+import os  # Required to access environment variables
+
+
+def load_env(file_path=".env"):
+    """A simple .env file loader."""
+    try:
+        with open(file_path, "r") as env_file:
+            for line in env_file:
+                # Ignore comments and empty lines
+                line = line.strip()
+                if line.startswith("#") or not line:
+                    continue
+                
+                # Parse key-value pairs
+                key, value = line.split("=", 1)
+                os.environ[key] = value.strip()
+    except FileNotFoundError:
+        print(f"Warning: .env file not found at {file_path}")
+    except Exception as e:
+        print(f"Error loading .env file: {e}")
+
+# Load the .env variables
+load_env()
+
+# Access the variables
+GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY")
+
+# Create the Flask app
+app = Flask(__name__)
+app.secret_key = 'yes'  # Set the secret key for the app
+logging.basicConfig(level=logging.DEBUG)  # Set the logging level to debug
+
 
 # create the flask app
 app = Flask(__name__)
@@ -25,7 +57,8 @@ def initialize_products():
                 2: Product(2, "Ecima", 45.00, "Manual, 2 Seater, 900W", stock=15),
                 3: Product(3, "EV Urban", 65.00, "Manual, 2 Seater, 1200W", stock=20),
                 4: Product(4, "EV Fun", 75.00, "Manual, 1 Seater, 1500W", stock=5),
-                5: Product(5, "Energica Experia", 90.00, "Manual, 2 Seater, 1380W", stock=8)
+                5: Product(5, "Energica Experia", 90.00, "Manual, 2 Seater, 1380W", stock=8),
+                6: Product(6, "Niggaton", 90.00, "Manual, 2 Seater, 1380W", stock=10)
             }
             db['products'] = products
             logging.info("Products initialized successfully")
@@ -155,7 +188,7 @@ def payment():
                     except ValueError as e:
                         logging.error(f"Error finding nearest carpark: {e}")
                         flash("Error processing location data", "error")
-                        return render_template('payment.html', form=form)
+                        return render_template('payment.html', form=form, google_maps_api_key=GOOGLE_MAPS_API_KEY)
                 
                 # Compile customer information
                 customer_info = {
@@ -195,7 +228,7 @@ def payment():
                 except Exception as e:
                     logging.error(f"Error saving order to database: {e}")
                     flash("Error saving order", "error")
-                    return render_template('payment.html', form=form)
+                    return render_template('payment.html', form=form, google_maps_api_key=GOOGLE_MAPS_API_KEY)
                 
                 # Clear session data except for email
                 rental_info = session.pop('rental_info', None)
@@ -214,14 +247,14 @@ def payment():
             except Exception as e:
                 logging.error(f"Error processing payment: {e}", exc_info=True)
                 flash("Error processing payment", "error")
-                return render_template('payment.html', form=form)
+                return render_template('payment.html', form=form, google_maps_api_key=GOOGLE_MAPS_API_KEY)
         else:
             # If form validation fails, log errors and re-render template
             logging.warning(f"Form validation failed: {form.errors}")
-            return render_template('payment.html', form=form)
+            return render_template('payment.html', form=form, google_maps_api_key=GOOGLE_MAPS_API_KEY)
 
     # GET request - render empty form
-    return render_template('payment.html', form=form)# Add new route for viewing orders
+    return render_template('payment.html', form=form, google_maps_api_key=GOOGLE_MAPS_API_KEY)# Add new route for viewing orders
 
 @app.route('/orders')
 def view_orders():
@@ -248,7 +281,7 @@ def view_order(order_id):
             orders = db.get('orders', {}) # Get all orders
             order = orders.get(order_id) # Find specific order
             if order:
-                return render_template('order_details.html', order=order)
+                return render_template('order_details.html', order=order, google_maps_api_key=GOOGLE_MAPS_API_KEY)
             flash("Order not found", "error")
     except Exception as e:
         logging.error(f"Error in view_order: {str(e)}", exc_info=True)
@@ -263,7 +296,7 @@ def order_confirmation(order_id):
             orders = db.get('orders', {})
             order = orders.get(order_id)
             if order:
-                return render_template('order_confirmation.html', order_id=order_id, order=order)
+                return render_template('order_confirmation.html', order_id=order_id, order=order, google_maps_api_key=GOOGLE_MAPS_API_KEY)
             flash("Order not found", "error")
     except Exception as e:
         logging.error(f"Error in order_confirmation: {str(e)}", exc_info=True)
@@ -360,81 +393,89 @@ def find_nearest_carpark(latitude, longitude):
     
     return nearest_carpark
 
-# Add to app.py
-def initialize_bike_ids():
-    """Initialize the bike IDs database if it doesn't exist"""
-    try:
-        with shelve.open('bike_ids.db', 'c') as db:
-            if 'bike_ids' not in db:
-                # Initialize with some example IDs
-                bike_ids = {
-                    'BIKE001': BikeID('BIKE001', 'Activa-E'),
-                    'BIKE002': BikeID('BIKE002', 'Ecima'),
-                    'BIKE003': BikeID('BIKE003', 'EV Urban'),
-                }
-                db['bike_ids'] = bike_ids
-            logging.info("Bike IDs database initialized successfully")
-    except Exception as e:
-        logging.error(f"Error initializing bike IDs database: {e}")
-
-@app.route('/lock', methods=['GET', 'POST'])
-def lock_bike():
-    form = LockUnlockForm()
+@app.route('/manage-ids', methods=['GET', 'POST'])
+def manage_ids():
+    form = BikeIDManagementForm()
     if form.validate_on_submit():
         try:
-            bike_id = form.bike_id.data.upper()
-            user_email = session.get('user_email')
-            
-            # Get bike ID data
+            with shelve.open('product.db', 'c') as product_db:
+                products = product_db.get('products', {})
+                bike_name = form.bike_name.data
+
+                # Check if product exists, if not create
+                existing_product = None
+                for product in products.values():
+                    if product.get_name() == bike_name:
+                        existing_product = product
+                        break
+
+                if not existing_product:
+                    new_product_id = len(products) + 1
+                    new_product = Product(new_product_id, bike_name, 0, "", form.stock.data)
+                    products[new_product_id] = new_product
+                else:
+                    existing_product._Product__stock += form.stock.data
+
+                product_db['products'] = products
+
+                # Regenerate bike IDs
+                initialize_bike_ids(products)
+
+                flash('Product and bike IDs updated successfully!', 'success')
+                return redirect(url_for('manage_ids'))
+
+        except Exception as e:
+            logging.error(f"Error in manage_ids: {str(e)}")
+            flash('Error processing request', 'error')
+
+    if request.method == 'POST' and 'edit_bike_id' in request.form:
+        try:
+            old_bike_id = request.form.get('old_bike_id')
+            new_bike_id = request.form.get('new_bike_id')
+
             with shelve.open('bike_ids.db', 'c') as db:
                 bike_ids = db.get('bike_ids', {})
-                if bike_id not in bike_ids:
-                    flash('Invalid bike ID', 'error')
-                    return render_template('lock.html', form=form)
-                bike = bike_ids[bike_id]
-            
-            # Get product data
-            with shelve.open('product.db', 'c') as db:
-                products = db.get('products', {})
-                product = None
-                for p in products.values():
-                    if p.get_name() == bike.get_bike_name():
-                        product = p
-                        break
-                
-                if not product:
-                    flash('Product not found', 'error')
-                    return render_template('lock.html', form=form)
-            
-            if bike.get_status() == 'locked':
-                flash('Bike is already locked', 'error')
-                return render_template('lock.html', form=form)
-            
-            # Process lock
-            if bike.return_bike():  # This sets status to 'available' and clears current_user
-                # Update bike status
-                with shelve.open('bike_ids.db', 'c') as db:
-                    bike_ids = db.get('bike_ids', {})
-                    bike_ids[bike_id] = bike
+
+                if old_bike_id in bike_ids:
+                    bike_info = bike_ids.pop(old_bike_id)
+                    bike_ids[new_bike_id] = bike_info
+
                     db['bike_ids'] = bike_ids
-                
-                # Update product stock and rental count
-                with shelve.open('product.db', 'c') as db:
-                    products = db.get('products', {})
-                    product.decrease_rental()  # This will increase stock and decrease rental
-                    products[product.get_product_id()] = product
-                    db['products'] = products
-                
-                flash('Bike locked successfully!', 'success')
-                return redirect(url_for('lock_success'))
-            else:
-                flash('Error locking bike', 'error')
-                
+
+                    flash(f"Bike ID updated from {old_bike_id} to {new_bike_id} successfully!", 'success')
+                else:
+                    flash("Old Bike ID not found.", 'error')
+
         except Exception as e:
-            logging.error(f"Error in lock_bike: {str(e)}")
-            flash('Error processing request', 'error')
-            
-    return render_template('lock.html', form=form)
+            logging.error(f"Error updating bike ID: {str(e)}")
+            flash('Error updating bike ID', 'error')
+
+    try:
+        bike_inventory = {}
+        with shelve.open('bike_ids.db', 'r') as db:
+            bike_ids = db.get('bike_ids', {})
+
+        with shelve.open('product.db', 'r') as db:
+            products = db.get('products', {})
+
+        # Build inventory
+        for product in products.values():
+            product_name = product.get_name()
+            bike_inventory[product_name] = {
+                'stock': product.get_stock(),
+                'rental': product.get_rental(),
+                'ids': {
+                    bike_id: {**bike_info, 'id': bike_id}  # Add the ID to the dictionary
+                    for bike_id, bike_info in bike_ids.items()
+                    if bike_info['name'] == product_name
+                }
+            }
+
+    except Exception as e:
+        bike_inventory = {}
+        logging.error(f"Error retrieving bike IDs and products: {str(e)}")
+
+    return render_template('manage_ids.html', form=form, bike_inventory=bike_inventory)
 
 @app.route('/unlock', methods=['GET', 'POST'])
 def unlock_bike():
@@ -454,14 +495,16 @@ def unlock_bike():
                 if bike_id not in bike_ids:
                     flash('Invalid bike ID', 'error')
                     return render_template('unlock.html', form=form)
-                bike = bike_ids[bike_id]
+                
+                bike_info = bike_ids[bike_id]
+                bike_name = bike_info['name']
             
             # Get product data and check stock
             with shelve.open('product.db', 'c') as db:
                 products = db.get('products', {})
                 product = None
                 for p in products.values():
-                    if p.get_name() == bike.get_bike_name():
+                    if p.get_name() == bike_name:
                         product = p
                         break
                 
@@ -479,7 +522,7 @@ def unlock_bike():
                 has_valid_rental = False
                 for order in orders.values():
                     if (order.get_customer_info()['email'] == user_email and 
-                        any(item['product'].get_name() == bike.get_bike_name() 
+                        any(item['product'].get_name() == bike_name 
                             for item in order.get_items().values())):
                         has_valid_rental = True
                         break
@@ -489,28 +532,28 @@ def unlock_bike():
                     return render_template('unlock.html', form=form)
             
             # Process unlock
-            if bike.get_status() == 'unlocked':
+            if bike_info['status'] == 'unlocked':
                 flash('Bike is already unlocked', 'error')
                 return render_template('unlock.html', form=form)
             
-            if bike.unlock_bike(user_email):
-                # Update bike status
-                with shelve.open('bike_ids.db', 'c') as db:
-                    bike_ids = db.get('bike_ids', {})
-                    bike_ids[bike_id] = bike
-                    db['bike_ids'] = bike_ids
-                
-                # Update product stock and rental count
-                with shelve.open('product.db', 'c') as db:
-                    products = db.get('products', {})
-                    product.increase_rental()  # This will decrease stock and increase rental
-                    products[product.get_product_id()] = product
-                    db['products'] = products
-                
-                flash('Bike unlocked successfully!', 'success')
-                return redirect(url_for('lock_success'))
-            else:
-                flash('Error unlocking bike', 'error')
+            # Update bike status
+            with shelve.open('bike_ids.db', 'c') as db:
+                bike_ids = db.get('bike_ids', {})
+                bike_ids[bike_id]['status'] = 'unlocked'
+                bike_ids[bike_id]['current_user'] = user_email
+                db['bike_ids'] = bike_ids
+            
+            # Update product stock and rental count
+            with shelve.open('product.db', 'c') as db:
+                products = db.get('products', {})
+                for p in products.values():
+                    if p.get_name() == bike_name:
+                        p.increase_rental()
+                        break
+                db['products'] = products
+            
+            flash('Bike unlocked successfully!', 'success')
+            return redirect(url_for('lock_success'))
             
         except Exception as e:
             logging.error(f"Error in unlock_bike: {str(e)}")
@@ -518,74 +561,78 @@ def unlock_bike():
             
     return render_template('unlock.html', form=form)
 
-@app.route('/lock-success')
-def lock_success():
-    return render_template('lock_success.html')
-
-@app.route('/manage-ids', methods=['GET', 'POST'])
-def manage_ids():
-    form = BikeIDManagementForm()
+@app.route('/lock', methods=['GET', 'POST'])
+def lock_bike():
+    form = LockUnlockForm()
     if form.validate_on_submit():
         try:
+            bike_id = form.bike_id.data.upper()
+            user_email = session.get('user_email')
+            
+            # Get bike ID data
             with shelve.open('bike_ids.db', 'c') as db:
                 bike_ids = db.get('bike_ids', {})
-                new_id = form.id_string.data.upper()
+                if bike_id not in bike_ids:
+                    flash('Invalid bike ID', 'error')
+                    return render_template('lock.html', form=form)
                 
-                if new_id in bike_ids:
-                    flash('ID already exists', 'error')
-                else:
-                    bike_ids[new_id] = BikeID(new_id, form.bike_name.data)
-                    db['bike_ids'] = bike_ids
-                    flash('Bike ID added successfully!', 'success')
-                    return redirect(url_for('manage_ids'))
+                bike_info = bike_ids[bike_id]
+                bike_name = bike_info['name']
+            
+            # Get product data
+            with shelve.open('product.db', 'c') as db:
+                products = db.get('products', {})
+                product = None
+                for p in products.values():
+                    if p.get_name() == bike_name:
+                        product = p
+                        break
                 
+                if not product:
+                    flash('Product not found', 'error')
+                    return render_template('lock.html', form=form)
+            
+            # Verify current user
+            if bike_info['current_user'] != user_email:
+                flash('You are not the current user of this bike', 'error')
+                return render_template('lock.html', form=form)
+            
+            # Update bike status
+            with shelve.open('bike_ids.db', 'c') as db:
+                bike_ids = db.get('bike_ids', {})
+                bike_ids[bike_id]['status'] = 'locked'
+                bike_ids[bike_id]['current_user'] = None
+                db['bike_ids'] = bike_ids
+            
+            # Update product stock 
+            with shelve.open('product.db', 'c') as db:
+                products = db.get('products', {})
+                for p in products.values():
+                    if p.get_name() == bike_name:
+                        p.decrease_rental()
+                        break
+                db['products'] = products
+            
+            flash('Bike locked successfully!', 'success')
+            return redirect(url_for('lock_success'))
+            
         except Exception as e:
-            logging.error(f"Error in manage_ids: {str(e)}")
+            logging.error(f"Error in lock_bike: {str(e)}")
             flash('Error processing request', 'error')
-    
-    try:
-        bike_inventory = {}
-        with shelve.open('bike_ids.db', 'r') as db:
-            bike_ids = db.get('bike_ids', {})
-        
-        with shelve.open('product.db', 'r') as db:
-            products = db.get('products', {})
             
-            # Initialize inventory with product information
-            for product in products.values():
-                bike_inventory[product.get_name()] = {
-                    'stock': product.get_stock(),
-                    'rental': product.get_rental(),
-                    'ids': {}
-                }
-            
-            # Add bike IDs to their respective products
-            for bike_id, bike in bike_ids.items():
-                bike_name = bike.get_bike_name()
-                if bike_name in bike_inventory:
-                    bike_inventory[bike_name]['ids'][bike_id] = bike
-                else:
-                    bike_inventory[bike_name] = {
-                        'stock': 0,
-                        'rental': 0,
-                        'ids': {bike_id: bike}
-                    }
-                    
-    except Exception as e:
-        bike_inventory = {}
-        logging.error(f"Error retrieving bike IDs and products: {str(e)}")
-        
-    return render_template('manage_ids.html', form=form, bike_inventory=bike_inventory)
+    return render_template('lock.html', form=form)
 
 @app.route('/delete-id/<id_string>', methods=['POST'])
 def delete_id(id_string):
     try:
+        # Instead of deleting bike ID, reset its status
         with shelve.open('bike_ids.db', 'c') as db:
             bike_ids = db.get('bike_ids', {})
             if id_string in bike_ids:
-                del bike_ids[id_string]
+                bike_ids[id_string]['status'] = 'available'
+                bike_ids[id_string]['current_user'] = None
                 db['bike_ids'] = bike_ids
-                flash('Bike ID deleted successfully!', 'success')
+                flash('Bike ID reset successfully!', 'success')
             else:
                 flash('Bike ID not found', 'error')
     except Exception as e:
@@ -593,6 +640,11 @@ def delete_id(id_string):
         flash('Error processing request', 'error')
         
     return redirect(url_for('manage_ids'))
+
+@app.route('/lock-success')
+def lock_success():
+    return render_template('lock_success.html')
+
 
 def initialize_orders():
     """Initialize the orders database if it doesn't exist"""
@@ -604,23 +656,24 @@ def initialize_orders():
     except Exception as e:
         logging.error(f"Error initializing orders database: {e}")
 
-def initialize_bike_ids():
-    """Initialize the bike IDs database if it doesn't exist"""
+def initialize_bike_ids(products):
+    """Initialize bike IDs based on existing products"""
     try:
         with shelve.open('bike_ids.db', 'c') as db:
-            if 'bike_ids' not in db:
-                # Initialize with some example IDs
-                bike_ids = {
-                    'BIKE001': BikeID('BIKE001', 'Activa-E'),
-                    'BIKE002': BikeID('BIKE002', 'Ecima'),
-                    'BIKE003': BikeID('BIKE003', 'EV Urban'),
+            bike_ids = {}
+            for idx, product in enumerate(products.values(), 1):
+                # Generate bike IDs based on product order
+                bike_id = f"BIKE{idx:03d}"
+                bike_ids[bike_id] = {
+                    'name': product.get_name(),
+                    'status': 'available',
+                    'current_user': None
                 }
-                db['bike_ids'] = bike_ids
+            db['bike_ids'] = bike_ids
             logging.info("Bike IDs database initialized successfully")
     except Exception as e:
         logging.error(f"Error initializing bike IDs database: {e}")
-
-
+        
 @app.route('/check-session')
 def check_session():
     email = session.get('user_email')
@@ -630,7 +683,11 @@ def check_session():
 if __name__ == '__main__':
     initialize_products()
     initialize_orders()
-    initialize_bike_ids()
-    app.run(debug=True)
     
+    # Load products first before initializing bike IDs
+    with shelve.open('product.db', 'r') as db:
+        products = db.get('products', {})
+        initialize_bike_ids(products)
+    
+    app.run(debug=True)
 

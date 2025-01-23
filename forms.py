@@ -1,7 +1,8 @@
 # In forms.py
 from flask_wtf import FlaskForm
-from wtforms import StringField, DateField, HiddenField, SubmitField
-from wtforms.validators import DataRequired, ValidationError, Regexp, Email
+from wtforms import StringField, DateField, HiddenField, SubmitField, IntegerField
+from wtforms.validators import DataRequired, ValidationError, Regexp, Email, NumberRange
+import email_validator
 import re  # Add this import at the top
 
 class DateSelectionForm(FlaskForm):
@@ -61,8 +62,9 @@ class PaymentForm(FlaskForm):
 class LockUnlockForm(FlaskForm):
     bike_id = StringField('Bike ID', validators=[DataRequired()])
     submit = SubmitField('Submit')
-
+    
 class BikeIDManagementForm(FlaskForm):
     id_string = StringField('Bike ID', validators=[DataRequired()])
     bike_name = StringField('Bike Name', validators=[DataRequired()])
+    stock = IntegerField('Stock', validators=[DataRequired(), NumberRange(min=0)])
     submit = SubmitField('Add ID')
