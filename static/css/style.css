@@ -1,0 +1,75 @@
+body {
+
+    font-family: Arial, Helvetica, sans-serif;
+
+
+}
+
+h1 {
+    margin-top: 0;
+    font-weight: bold;
+    font-size: 2.5em;
+
+}
+
+.loginpage {
+
+    margin-right: 5em;
+    float: right;
+
+
+}
+
+.login2 {
+    position: absolute;
+    background-color: #E8ECE4;
+    top: 0;
+    right: 0;
+    width: 40%;
+    height: 100vh;
+
+}
+
+
+
+.loginfield {
+
+    margin-top: 10px;
+    margin-bottom: 10px;
+
+
+}
+
+.forgot {
+
+    font-size: x-small;
+}
+
+.loginbutton {
+
+    background-color: #2ECC71;
+    border-radius: 20px;
+    border: 0;
+    padding-left: 0.5em;
+    padding-right: 0.5em;
+
+}
+
+.userdata {
+
+width: 50%;
+display: inline;
+
+
+}
+
+td {
+padding: 1em;
+padding-left: 2em;
+padding-right: 2em;
+}
+
+
+
+
+
