@@ -94,6 +94,209 @@ def generate_svg_points(gpx_file_path):
         print(f"Error generating SVG points: {e}")
         return ""
 
+def initialize_bike_data():
+    """Populates the bike database with default data if empty."""
+    db = shelve.open('bike.db', 'c')
+    bikes_dict = db.get('Bikes', {})
+
+    if not bikes_dict:  # Only initialize if the database is empty
+        default_bikes = {
+            1: {
+                "bike_name": "Activa-e",
+                "price": 30.0,
+                "seating_capacity": 1,
+                "engine_output": "700",
+                "transmission_type": "Manual",
+                "stock_quantity": 15,
+                "upload_bike_image": "activa-e-removebg-preview.png"
+            },
+            2: {
+                "bike_name": "Ecima",
+                "price": 45.0,
+                "seating_capacity": 1,
+                "engine_output": "900 ",
+                "transmission_type": "Manual",
+                "stock_quantity": 17,
+                "upload_bike_image": "ECIMA.png"
+            },
+            3: {
+                "bike_name": "EV Urban",
+                "price": 65.0,
+                "seating_capacity": 1,
+                "engine_output": "1200 ",
+                "transmission_type": "Manual",
+                "stock_quantity": 10,
+                "upload_bike_image": "ev_urban.png"
+            },
+            4: {
+                "bike_name": "EV Fun",
+                "price": 75.0,
+                "seating_capacity": 1,
+                "engine_output": "1500 ",
+                "transmission_type": "Manual",
+                "stock_quantity": 5,
+                "upload_bike_image": "c241105deng_02.jpg"
+            },
+            5: {
+                "bike_name": "Energica Eva Ribelle",
+                "price": 65.0,
+                "seating_capacity": 1,
+                "engine_output": "1250",
+                "transmission_type": "Manual",
+                "stock_quantity": 5,
+                "upload_bike_image": "Energica_Eva_Ribelle_RS_removebg.png"
+            },
+            6: {
+                "bike_name": "Energica Ego+ RS",
+                "price": 65.0,
+                "seating_capacity": 1,
+                "engine_output": "1380",
+                "transmission_type": "Manual",
+                "stock_quantity": 8,
+                "upload_bike_image": "energica_ego_rs.png"
+            },
+            7: {
+                "bike_name": "Energica Experia",
+                "price": 80.0,
+                "seating_capacity": 1,
+                "engine_output": "1500",
+                "transmission_type": "Manual",
+                "stock_quantity": 4,
+                "upload_bike_image": "energica_experia.png"
+            },
+            8: {
+                "bike_name": "Energica Esse Esse",
+                "price": 85.0,
+                "seating_capacity": 1,
+                "engine_output": "1500",
+                "transmission_type": "Manual",
+                "stock_quantity": 2,
+                "upload_bike_image": "esse_esse-removebg-preview.png"
+            }
+        }
+        db['Bikes'] = default_bikes
+        print("Default bike data has been initialized.")
+    else:
+        print("Bike data already exists. Initialization skipped.")
+
+    db.close()
+
+def restore_missing_bikes():
+    """Checks and restores missing or incorrect bikes from the default list."""
+    db = shelve.open('bike.db', 'c')
+    bikes_dict = db.get('Bikes', {})
+
+    default_bikes = {
+        1: {
+            "bike_name": "Activa-e",
+            "price": 30.0,
+            "seating_capacity": 1,
+            "engine_output": "700",
+            "transmission_type": "Manual",
+            "stock_quantity": 15,
+            "upload_bike_image": "activa-e-removebg-preview.png"
+        },
+        2: {
+            "bike_name": "Ecima",
+            "price": 45.0,
+            "seating_capacity": 1,
+            "engine_output": "900",
+            "transmission_type": "Manual",
+            "stock_quantity": 17,
+            "upload_bike_image": "ECIMA.png"
+        },
+        3: {
+            "bike_name": "EV Urban",
+            "price": 65.0,
+            "seating_capacity": 1,
+            "engine_output": "1200",
+            "transmission_type": "Manual",
+            "stock_quantity": 10,
+            "upload_bike_image": "ev_urban.png"
+        },
+        4: {
+            "bike_name": "EV Fun",
+            "price": 75.0,
+            "seating_capacity": 1,
+            "engine_output": "1500",
+            "transmission_type": "Manual",
+            "stock_quantity": 5,
+            "upload_bike_image": "c241105deng_02.jpg"
+        },
+        5: {
+            "bike_name": "Energica Eva Ribelle",
+            "price": 65.0,
+            "seating_capacity": 1,
+            "engine_output": "1250",
+            "transmission_type": "Manual",
+            "stock_quantity": 5,
+            "upload_bike_image": "Energica_Eva_Ribelle_RS_removebg.png"
+        },
+        6: {
+            "bike_name": "Energica Ego+ RS",
+            "price": 65.0,
+            "seating_capacity": 1,
+            "engine_output": "1380",
+            "transmission_type": "Manual",
+            "stock_quantity": 8,
+            "upload_bike_image": "energica_ego_rs.png"
+        },
+        7: {
+            "bike_name": "Energica Experia",
+            "price": 80.0,
+            "seating_capacity": 1,
+            "engine_output": "1500",
+            "transmission_type": "Manual",
+            "stock_quantity": 4,
+            "upload_bike_image": "energica_experia.png"
+        },
+        8: {
+            "bike_name": "Energica Esse Esse",
+            "price": 85.0,
+            "seating_capacity": 1,
+            "engine_output": "1500",
+            "transmission_type": "Manual",
+            "stock_quantity": 2,
+            "upload_bike_image": "esse_esse-removebg-preview.png"
+        }
+    }
+
+    # Check for missing or mismatched bikes
+    for bike_id, default_data in default_bikes.items():
+        if bike_id not in bikes_dict:
+            bikes_dict[bike_id] = default_data
+        else:
+            current_bike = bikes_dict[bike_id]
+            if current_bike != default_data:
+                bikes_dict[bike_id] = default_data
+
+    extra_bikes = [bike_id for bike_id in bikes_dict if bike_id not in default_bikes]
+    for bike_id in extra_bikes:
+        del bikes_dict[bike_id]
+
+    db['Bikes'] = bikes_dict
+    db.close()
+
+
+@app.route('/deleteAndResetBike/<int:id>/', methods=['POST'])
+def delete_and_reset_bike(id):
+    db = shelve.open('bike.db', 'c')
+    bikes_dict = db.get('Bikes', {})
+
+    if id in bikes_dict:
+        del bikes_dict[id]
+        db['Bikes'] = bikes_dict
+        db.close()
+
+        restore_missing_bikes()
+
+        flash("Bike deleted and missing bikes restored!", "success")
+    else:
+        db.close()
+        flash("Bike not found.", "error")
+
+    return redirect(url_for('retrieve_bikes'))
+
 
 @app.route('/')
 def home():
@@ -125,7 +328,7 @@ def create_bike():
             "price": float(create_bike_form.price.data),
             "transmission_type": create_bike_form.transmission_type.data,
             "seating_capacity": create_bike_form.seating_capacity.data,
-            "engine_output": create_bike_form.engine_output.data,
+            "engine_output": create_bike_form.engine_output.data.strip() + "w",
             "stock_quantity": int(create_bike_form.stock_quantity.data),
         }
 
@@ -140,6 +343,7 @@ def create_bike():
 
 @app.route('/retrieveBikes')
 def retrieve_bikes():
+    restore_missing_bikes()
     db = shelve.open('bike.db', 'c')
     bikes_dict = db.get('Bikes', {})
     db.close()
@@ -194,7 +398,6 @@ def update_bike(id):
             flash("Bike updated successfully!", "success")
             return redirect(url_for('retrieve_bikes'))
 
-        # Pre-fill the form with existing bike details
         update_bike_form.bike_name.data = bike["bike_name"]
         update_bike_form.price.data = bike["price"]
         update_bike_form.transmission_type.data = bike["transmission_type"]
