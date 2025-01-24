@@ -27,11 +27,14 @@
             <a class="nav-link" href="/dashboard">Dashboard</a>
           </li>
           <li class="nav-item">
-            <a class="nav-link" href="/contact-us">FAQ</a>
+            <a class="nav-link" href="/createDefect">Report Defects</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="/createFAQ">FAQ</a>
           </li>
         </ul>
         <div class="d-flex">
-          <a href="/login" class="login-btn">Login</a>
+          <a href="{{ url_for('admin') }}" class="btn btn-success btn-lg rounded-pill">Login</a>
         </div>
       </div>
     </div>

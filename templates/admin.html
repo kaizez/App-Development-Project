@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Admin Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3" crossorigin="anonymous">
+    <style>
+        body {
+            background-color: #f5f5f5;
+            font-family: Sk-Modernist, 'Courier New', Courier, monospace;
+        }
+        .card {
+            border: none;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.05);
+        }
+        .card-title {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #333;
+        }
+        .card-text {
+            color: #666;
+        }
+        .btn {
+            background-color: #2ecc71;
+            border-color: #2ecc71;
+            transition: all 0.3s ease;
+        }
+        .btn:hover {
+            background-color: #27ae60;
+            border-color: #27ae60;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+<body>
+    <div class="container py-5">
+        <h1 class="display-4 mb-4">Admin Dashboard</h1>
+        <div class="row">
+            <div class="col-md-4 mb-4">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <h5 class="card-title">Retrieve Defects</h5>
+                        <p class="card-text">View and manage reported bike defects.</p>
+                        <a href="{{ url_for('retrieve_defects') }}" class="btn btn-primary">Go to Defects</a>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4 mb-4">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <h5 class="card-title">Create Bike</h5>
+                        <p class="card-text">Add new bikes to the system.</p>
+                        <a href="{{ url_for('home') }}" class="btn btn-primary">Go to Create Bike</a>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4 mb-4">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <h5 class="card-title">Retrieve Dashboard</h5>
+                        <p class="card-text">View system analytics and metrics.</p>
+                        <a href="{{ url_for('home') }}" class="btn btn-primary">Go to Dashboard</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="text-center mt-4">
+            <a href="{{ url_for('home') }}" class="btn btn-secondary">Back to Home</a>
+        </div>
+    </div>
+</body>
+</html>
