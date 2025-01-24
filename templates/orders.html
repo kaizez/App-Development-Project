@@ -1,85 +1,90 @@
 {% extends "base.html" %}
 
-{% block extra_css %}
-<style>
-    .transaction-item {
-        border: 1px solid #ddd;
-        margin: 10px 0;
-        padding: 15px;
-        border-radius: 5px;
-    }
-
-    .transaction-header {
-        display: flex;
-        justify-content: space-between;
-        border-bottom: 1px solid #eee;
-        padding-bottom: 10px;
-        margin-bottom: 10px;
-    }
-
-    .transaction-details {
-        margin: 10px 0;
-    }
-
-    .items-list {
-        margin-left: 20px;
-    }
-</style>
-{% endblock %}
-
 {% block content %}
-<h1>Transaction History</h1>
-
-<div class="transaction-history">
+<div class="container mt-4">
+    <h2>My Bike Rentals</h2>
     {% if orders %}
-    {% for order in orders %}
-    <div class="transaction-item">
-        <div class="transaction-header">
-            <div>
-                <strong>Transaction ID:</strong> {{ order.get_order_id() }}
-                <br>
-                <strong>Date:</strong> {{ order.get_order_date().strftime('%d %B %Y, %I:%M %p') }}
-                {% if order.get_rental_dates() %}
-                    {% if order.get_rental_dates().get('start_date') %}
-                        <br>
-                        <strong>Rental Period:</strong> 
-                        {{ order.get_rental_dates()['start_date'] }} to {{ order.get_rental_dates()['end_date'] }}
-                        ({{ order.get_rental_dates()['days'] }} days)
-                    {% endif %}
-                {% endif %}
+        {% for order in orders %}
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>Order ID: {{ order.get_order_id() }}</span>
+                <span>Order Date: {{ order.get_order_date().strftime('%Y-%m-%d %H:%M') }}</span>
             </div>
-            <div>
-                <strong>Total Amount:</strong> ${{ "%.2f"|format(order.get_total()) }}
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-8">
+                        <h5>Rental Details</h5>
+                        <p>
+                            <strong>Start Date:</strong> {{ order.get_rental_dates().get('start_date', 'N/A') }}<br>
+                            <strong>End Date:</strong> {{ order.get_rental_dates().get('end_date', 'N/A') }}<br>
+                            <strong>Rental Duration:</strong> {{ order.get_rental_dates().get('days', 0) }} days
+                        </p>
+                    </div>
+                    <div class="col-md-4">
+                        <h5>Total Cost</h5>
+                        <p>${{ "%.2f"|format(order.get_total()) }}</p>
+                    </div>
+                </div>
+                
+                <div class="row mt-3">
+                    <div class="col-12">
+                        <h5 class="mb-2">Rented Bike(s)</h5>
+                        {% for item_id, item in order.get_items().items() %}
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <div class="d-flex justify-content-center flex-grow-1" style="margin-left: 10%;">
+                                <span class="fw-bold text-center">{{ item['product'].get_name() }}</span>
+                            </div>
+                            <div class="d-flex">
+                                <button class="btn btn-sm btn-outline-secondary me-2" data-order-id="{{ order.get_order_id() }}" onclick="editOrder(this)">
+                                    <i class="bi bi-pencil"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-info me-2" data-order-id="{{ order.get_order_id() }}" onclick="viewOrderDetails(this)">
+                                    <i class="bi bi-eye"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger" data-order-id="{{ order.get_order_id() }}" onclick="deleteOrder(this)">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
             </div>
         </div>
-
-        <div class="transaction-details">
-            <strong>Shipped to:</strong> {{ order.get_customer_info()['full_name'] }}
-            <br>
-            <strong>Address:</strong>
-            {{ order.get_customer_info()['address'] }},
-            {{ order.get_customer_info()['city'] }},
-            {{ order.get_customer_info()['postal_code'] }}
-        </div>
-
-        <div class="items-list">
-            <strong>Items Purchased:</strong>
-            <ul>
-                {% for item_id, item in order.get_items().items() %}
-                <li>
-                    {{ item['product'].get_name() }}
-                    (Qty: {{ item['quantity'] }}) -
-                    ${{ "%.2f"|format(item['product'].get_price() * item['quantity']) }}
-                </li>
-                {% endfor %}
-            </ul>
-        </div>
-
-        <a href="{{ url_for('view_order', order_id=order.get_order_id()) }}">View Full Details</a>
-    </div>
-    {% endfor %}
+        {% endfor %}
     {% else %}
-    <p>No transaction history found.</p>
+        <div class="alert alert-info">No rental orders found.</div>
     {% endif %}
 </div>
+{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+<script>
+function editOrder(button) {
+    const orderId = button.getAttribute('data-order-id');
+    window.location.href = `/order/${orderId}/edit`;
+}
+
+function viewOrderDetails(button) {
+    const orderId = button.getAttribute('data-order-id');
+    window.location.href = `/order/${orderId}`;
+}
+
+function deleteOrder(button) {
+    const orderId = button.getAttribute('data-order-id');
+    if(confirm('Are you sure you want to delete this order?')) {
+        fetch(`/order/${orderId}/delete`, { method: 'POST' })
+            .then(response => {
+                if (response.ok) {
+                    window.location.reload();
+                }
+            });
+    }
+}
+</script>
 {% endblock %}

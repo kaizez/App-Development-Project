@@ -3,63 +3,42 @@
 {% block title %}Checkout - EcoBike Rental{% endblock %}
 
 {% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/checkout.css') }}">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 {% endblock %}
 
-{% block extra_css %}
-<style>
-    .date-range-picker {
-        margin: 20px 0;
-    }
-    .date-inputs {
-        margin-bottom: 10px;
-    }
-    .date-picker {
-        padding: 8px;
-        border: 1px solid #ddd;
-        border-radius: 4px;
-        min-width: 200px;
-    }
-    #selected-dates, #total-price {
-        margin-top: 10px;
-        font-size: 16px;
-    }
-    #total-price {
-        font-weight: bold;
-        color: #2c3e50;
-    }
-</style>
-{% endblock %}
 
 {% block content %}
-<h1>Select Rental Dates</h1>
-
-<div class="order-summary">
-    <h2>Order Summary</h2>
-    {% for item in cart_items %}
-        <div class="cart-item">
-            <p>{{ item['product'].get_name() }}</p>
-            <p>Price per day: ${{ "%.2f"|format(item['product'].get_price()) }}</p>
-        </div>
-    {% endfor %}
-    
-    <form method="POST" id="rentalForm">
-        {{ form.csrf_token }}
-        
-        <div class="date-range-picker">
-            <h3>Select Rental Period</h3>
-            <div class="date-inputs">
-                <input type="text" id="dateRange" name="dateRange" class="date-picker" required>
-                {{ form.start_date(type="hidden", id="start_date") }}
-                {{ form.end_date(type="hidden", id="end_date") }}
+<div class="content">
+    <h1>Select Rental Dates</h1>
+    <br>
+    <div class="order-summary">
+        <h2>Order Summary</h2>
+        {% for item in cart_items %}
+            <div class="cart-item" style="margin-top: auto; margin-bottom: auto;">
+                <p>{{ item['product'].get_name() }}</p>
+                <p>Price per day: ${{ "%.2f"|format(item['product'].get_price()) }}</p>
             </div>
-            <div id="selected-dates"></div>
-            <div id="total-price">Base Price per Day: ${{ "%.2f"|format(total) }}</div>
-        </div>
+        {% endfor %}
+        <br>
+        <form method="POST" id="rentalForm">
+            {{ form.csrf_token }}
+            
+            <div class="date-range-picker">
+                <h3>Select Rental Period</h3>
+                <div class="date-inputs">
+                    <input type="text" id="dateRange" name="dateRange" class="date-picker" required>
+                    {{ form.start_date(type="hidden", id="start_date") }}
+                    {{ form.end_date(type="hidden", id="end_date") }}
+                </div>
+                <div id="selected-dates"></div>
+                <div id="total-price">Base Price per Day: ${{ "%.2f"|format(total) }}</div>
+            </div>
 
-        {{ form.submit }}
-    </form>
+            <button type="submit" class="btn btn-submit" id="checkout-btn" style="background-color: #28a745; color: white;">Proceed to Checkout</button>
+        </form>
+    </div>
 </div>
 {% endblock %}
 

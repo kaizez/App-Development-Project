@@ -306,54 +306,80 @@ def order_confirmation(order_id):
 @app.route('/order/<order_id>/edit', methods=['GET', 'POST'])
 def edit_order(order_id):
     try:
-        with shelve.open('orders.db', 'c') as db:# Open orders database in write mode
+        with shelve.open('orders.db', 'c') as db:  # Open orders database in write mode
             orders = db.get('orders', {})
             order = orders.get(order_id)
             
-            if request.method == 'POST': #new order date recieved via post request from forms
-                # Convert string dates to datetime objects
-                start_date = datetime.strptime(request.form['start_date'], '%Y-%m-%d')
-                end_date = datetime.strptime(request.form['end_date'], '%Y-%m-%d')
+            if not order:
+                flash("Order not found", "error")
+                return redirect(url_for('view_orders'))
+            
+            if request.method == 'POST':
+                try:
+                    # Convert string dates to datetime objects
+                    start_date = datetime.strptime(request.form['start_date'], '%Y-%m-%d')
+                    end_date = datetime.strptime(request.form['end_date'], '%Y-%m-%d')
+                    
+                    # Validate date range
+                    if start_date > end_date:
+                        flash("Start date must be before end date", "error")
+                        return render_template('edit_order.html', order=order)
+                    
+                    # Calculate new duration
+                    days = (end_date - start_date).days + 1
+                    
+                    # Update order details
+                    order.rental_dates['start_date'] = request.form['start_date']
+                    order.rental_dates['end_date'] = request.form['end_date']
+                    order.rental_dates['days'] = days
+                    
+                    # Update total based on new duration
+                    base_price = list(order.get_items().values())[0]['product'].get_price()
+                    order.total = base_price * days
+                    
+                    # Save edited order
+                    orders[order_id] = order
+                    db['orders'] = orders
+                    
+                    flash("Order updated successfully!", "success")
+                    return redirect(url_for('view_order', order_id=order_id))
                 
-                # Calculate new duration
-                days = (end_date - start_date).days + 1
-                
-                # Update order details
-                order.rental_dates['start_date'] = request.form['start_date']
-                order.rental_dates['end_date'] = request.form['end_date']
-                order.rental_dates['days'] = days
-                
-                # Update total based on new duration
-                base_price = list(order.get_items().values())[0]['product'].get_price()
-                order.total = base_price * days
-                
-                #save editted order
-                orders[order_id] = order
-                db['orders'] = orders
-                flash("Order updated successfully")
-                return redirect(url_for('view_order', order_id=order_id))
+                except Exception as e:
+                    logging.error(f"Error processing order edit: {e}")
+                    flash("Error updating order details", "error")
+                    return render_template('edit_order.html', order=order)
                 
             return render_template('edit_order.html', order=order)
-    except Exception as e:
-        flash("Error updating order")
-        return redirect(url_for('view_orders'))
     
+    except Exception as e:
+        logging.error(f"Error accessing orders database for edit: {e}")
+        flash("System error occurred", "error")
+        return redirect(url_for('view_orders'))
+
 @app.route('/order/<order_id>/delete', methods=['POST'])
 def delete_order(order_id):
     try:
-        with shelve.open('orders.db', 'c') as db: # write mode
-            orders = db.get('orders', {}) # get all order
+        with shelve.open('orders.db', 'c') as db:  # write mode
+            orders = db.get('orders', {})  # get all orders
+            
             if order_id in orders:
-                del orders[order_id] # delete order
+                # Optional: Implement soft delete or archiving if needed
+                deleted_order = orders.pop(order_id)  # delete order
                 db['orders'] = orders
-                flash("Order deleted successfully")
+                
+                # Optional logging of deleted order
+                logging.info(f"Order {order_id} deleted. Original order details: {deleted_order.get_order_id()}")
+                
+                flash("Order deleted successfully!", "success")
             else:
-                flash("Order not found")
-        return redirect(url_for('view_orders'))
-    except Exception as e:
-        flash("Error deleting order")
-        return redirect(url_for('view_orders'))
+                flash("Order not found", "error")
+            
+            return redirect(url_for('view_orders'))
     
+    except Exception as e:
+        logging.error(f"Error deleting order {order_id}: {e}")
+        flash("Error deleting order", "error")
+        return redirect(url_for('view_orders'))    
 
 def find_nearest_carpark(latitude, longitude):
     """
@@ -476,6 +502,7 @@ def manage_ids():
         logging.error(f"Error retrieving bike IDs and products: {str(e)}")
 
     return render_template('manage_ids.html', form=form, bike_inventory=bike_inventory)
+
 
 @app.route('/unlock', methods=['GET', 'POST'])
 def unlock_bike():
