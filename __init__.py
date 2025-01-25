@@ -133,13 +133,15 @@ def admin():
             user = User.from_dict(user_data)
             is_active = (current_time - user.get_last_login()) <= (30 * 24 * 3600)
             status = 'active' if is_active else 'inactive'
+            points = user.get_points()
 
             users.append((
                 user.get_username(),
                 user.get_user_id(),
                 email,
                 status,
-                user.is_admin()
+                user.is_admin(),
+                points
             ))
 
             # Only count non-admin users for statistics
@@ -176,13 +178,23 @@ def admin():
 
     return render_template('admin.html', users=users, stats=stats)
 
-
 @app.route('/dashboard')
 def dashboard():
     if not session.get('user_id'):
         return redirect(url_for('home'))
     return render_template('dashboard.html')
 
+@app.route('/rewards')
+def rewards():
+    if 'user_id' not in session:
+        return redirect(url_for('home'))
+
+    with shelve.open(db_path) as db:
+        user_data = db[session['user_id']]
+        user = User.from_dict(user_data)
+        points = user.get_points()
+
+    return render_template('rewards.html', points=points)
 
 @app.route('/edit/<user_id>', methods=['GET', 'POST'])
 def edit(user_id):
@@ -218,6 +230,22 @@ def edit(user_id):
 
         return render_template('edit.html', user_id=user_id, username=user.get_username())
 
+@app.route('/edit_points/<user_id>', methods=['POST'])
+def edit_points(user_id):
+    if not session.get('is_admin'):
+        return redirect(url_for('home'))
+
+    with shelve.open(db_path) as db:
+        for email, user_data in db.items():
+            user = User.from_dict(user_data)
+            if user.get_user_id() == user_id:
+                new_points = int(request.form['new_points'])
+                user.set_points(new_points)
+                db[email] = user.to_dict()
+                flash(f"User points updated to {new_points}.")
+                break
+
+    return redirect(url_for('admin'))
 
 @app.route('/delete/<user_id>', methods=['POST'])
 def delete(user_id):

@@ -102,6 +102,7 @@
         {% endwith %}
 
         <!-- Admin Users Table -->
+        <!-- Add this section in the admin panel -->
         <div class="card mb-4">
             <div class="card-header bg-primary text-white">
                 <h3 class="card-title mb-0">Admin Users</h3>
@@ -115,48 +116,35 @@
                                 <th>User ID</th>
                                 <th>Email</th>
                                 <th>Status</th>
+                                <th>Points</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {% for username, user_id, email, status, is_admin in users %}
-                                {% if is_admin %}
-                                <tr>
-                                    <td>{{ username }}</td>
-                                    <td>{{ user_id }}</td>
-                                    <td>{{ email }}</td>
-                                    <td>
-                                        <span class="badge {% if status == 'active' %}bg-success{% else %}bg-secondary{% endif %}">
-                                            {{ status }}
-                                        </span>
-                                    </td>
-                                    <td>
-                                        <div class="btn-group" role="group">
-                                            <form action="{{ url_for('edit', user_id=user_id) }}" method="GET" class="me-2">
-                                                <button type="submit" class="btn btn-primary btn-sm">Edit</button>
-                                            </form>
-                                            {% if email != session['user_id'] %}
-                                            <form action="{{ url_for('toggle_admin', user_id=user_id) }}" method="POST">
-                                                <button type="submit" class="btn btn-warning btn-sm">
-                                                    {% if is_admin %}Remove Admin{% else %}Make Admin{% endif %}
-                                                </button>
-                                            </form>
-                                            </form>
-                                            <form action="{{ url_for('delete', user_id=user_id) }}" method="POST">
-                                                <button type="submit" class="btn btn-danger btn-sm"
-                                                        onclick="return confirm('Are you sure you want to delete this admin?')"
-                                                        data-bs-toggle="tooltip"
-                                                        data-bs-placement="top"
-                                                        title="Delete Admin">
-                                                    Delete
-                                                </button>
-                                            </form>
-
-                                            {% endif %}
-                                        </div>
-                                    </td>
-                                </tr>
-                                {% endif %}
+                            {% for username, user_id, email, status, is_admin, points in users %}
+                            {% if is_admin %}
+                            <tr>
+                                <td>{{ username }}</td>
+                                <td>{{ user_id }}</td>
+                                <td>{{ email }}</td>
+                                <td>
+                                    <span class="badge {% if status == 'active' %}bg-success{% else %}bg-secondary{% endif %}">
+                                        {{ status }}
+                                    </span>
+                                </td>
+                                <td>{{ points }}</td>
+                                <td>
+                                    <div class="btn-group" role="group">
+                                        <form action="{{ url_for('edit_points', user_id=user_id) }}" method="POST" class="me-2">
+                                            <div class="input-group">
+                                                <input type="number" class="form-control" name="new_points" value="{{ points }}">
+                                                <button type="submit" class="btn btn-primary btn-sm">Update</button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endif %}
                             {% endfor %}
                         </tbody>
                     </table>
@@ -178,53 +166,42 @@
                                 <th>User ID</th>
                                 <th>Email</th>
                                 <th>Status</th>
+                                <th>Points</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {% for username, user_id, email, status, is_admin in users %}
-                                {% if not is_admin %}
-                                <tr>
-                                    <td>{{ username }}</td>
-                                    <td>{{ user_id }}</td>
-                                    <td>{{ email }}</td>
-                                    <td>
-                                        <span class="badge {% if status == 'active' %}bg-success{% else %}bg-secondary{% endif %}">
-                                            {{ status }}
-                                        </span>
-                                    </td>
-                                    <td>
-                                        <div class="btn-group" role="group">
-                                            <form action="{{ url_for('edit', user_id=user_id) }}" method="GET" class="me-2">
-                                                <button type="submit" class="btn btn-primary btn-sm">Edit</button>
-                                            </form>
-                                            <form action="{{ url_for('toggle_admin', user_id=user_id) }}" method="POST" class="me-2">
-                                                <button type="submit" class="btn btn-warning btn-sm">
-                                                    Make Admin
-                                                </button>
-                                            </form>
-                                            <form action="{{ url_for('delete', user_id=user_id) }}" method="POST">
-                                                <button type="submit" class="btn btn-danger btn-sm"
-                                                        onclick="return confirm('Are you sure you want to delete this user?')"
-                                                        data-bs-toggle="tooltip"
-                                                        data-bs-placement="top"
-                                                        title="Delete User">
-                                                    Delete
-                                                </button>
-                                            </form>
-                                        </div>
-                                    </td>
-                                </tr>
-                                {% endif %}
+                            {% for username, user_id, email, status, is_admin, points in users %}
+                            {% if not is_admin %}
+                            <tr>
+                                <td>{{ username }}</td>
+                                <td>{{ user_id }}</td>
+                                <td>{{ email }}</td>
+                                <td>
+                                    <span class="badge {% if status == 'active' %}bg-success{% else %}bg-secondary{% endif %}">
+                                        {{ status }}
+                                    </span>
+                                </td>
+                                <td>{{ points }}</td>
+                                <td>
+                                    <div class="btn-group" role="group">
+                                        <form action="{{ url_for('edit_points', user_id=user_id) }}" method="POST" class="me-2">
+                                            <div class="input-group">
+                                                <input type="number" class="form-control" name="new_points" value="{{ points }}">
+                                                <button type="submit" class="btn btn-primary btn-sm">Update</button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endif %}
                             {% endfor %}
                         </tbody>
                     </table>
                 </div>
             </div>
         </div>
-    </div>
 
-    </div>
 
     <!-- Admin Modal -->
     <div class="modal fade" id="addAdminModal" tabindex="-1" aria-labelledby="addAdminModalLabel" aria-hidden="true">

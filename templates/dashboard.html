@@ -9,11 +9,13 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body class="bg-light">
-    <div class="container mt-4">
-        <div class="d-flex justify-content-between align-items-center mb-4">
-            <h2>Welcome to your Dashboard</h2>
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Welcome to your Dashboard</h2>
+        <div>
+            <a href="{{ url_for('rewards') }}" class="btn btn-primary me-2">Go to Rewards</a>
             <a href="{{ url_for('logout') }}" class="btn btn-outline-danger">Logout</a>
         </div>
+    </div>
 
         {% with messages = get_flashed_messages() %}
             {% if messages %}
