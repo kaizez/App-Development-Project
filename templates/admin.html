@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Admin Panel</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <!-- Include Navbar -->
+    {% include "includes/_navbar.html" %}
+
+    <!-- Main Content -->
+    <div class="container mt-4">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2>Admin Panel</h2>
+            <div>
+                <button type="button" class="btn btn-success me-2" data-bs-toggle="modal" data-bs-target="#addAdminModal">
+                    Add New Admin
+                </button>
+            </div>
+        </div>
+
+        <!-- Dashboard Stats Section -->
+        <div class="row mb-4">
+            <!-- Total Users Card -->
+            <div class="col-md-4 mb-3">
+                <div class="card bg-light">
+                    <div class="card-body">
+                        <h5 class="card-title">Total Users</h5>
+                        <h2 class="mb-2">{{ stats.totalUsers }}</h2>
+                        <span class="badge {% if stats.totalGrowth >= 0 %}bg-success{% else %}bg-danger{% endif %}">
+                            {{ '+' if stats.totalGrowth >= 0 }}{{ stats.totalGrowth }}%
+                        </span>
+                    </div>
+                </div>
+            </div>
+            <!-- Active Users Card -->
+            <div class="col-md-4 mb-3">
+                <div class="card bg-light">
+                    <div class="card-body">
+                        <h5 class="card-title">Active Users</h5>
+                        <h2 class="mb-2">{{ stats.activeUsers }}</h2>
+                        <span class="badge {% if stats.activeGrowth >= 0 %}bg-success{% else %}bg-danger{% endif %}">
+                            {{ '+' if stats.activeGrowth >= 0 }}{{ stats.activeGrowth }}%
+                        </span>
+                    </div>
+                </div>
+            </div>
+            <!-- Monthly Rides Card -->
+            <div class="col-md-4 mb-3">
+                <div class="card bg-light">
+                    <div class="card-body">
+                        <h5 class="card-title">Monthly Rides</h5>
+                        <h2 class="mb-2">{{ stats.monthlyRides }}</h2>
+                        <span class="badge {% if stats.ridesGrowth >= 0 %}bg-success{% else %}bg-danger{% endif %}">
+                            {{ '+' if stats.ridesGrowth >= 0 }}{{ stats.ridesGrowth }}%
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts Row -->
+        <div class="row mb-4">
+            <!-- Growth Chart -->
+            <div class="col-md-8 mb-3">
+                <div class="card">
+                    <div class="card-header bg-white">
+                        <h5 class="card-title mb-0">Users & Rides Growth</h5>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="growthChart" height="300"></canvas>
+                    </div>
+                </div>
+            </div>
+            <!-- Users Distribution Chart -->
+            <div class="col-md-4 mb-3">
+                <div class="card">
+                    <div class="card-header bg-white">
+                        <h5 class="card-title mb-0">Users Distribution</h5>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="distributionChart" height="300"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Rest of the admin panel content remains the same -->
+          <!-- Flash Messages -->
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                {% for message in messages %}
+                    <div class="alert alert-success alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <!-- Admin Users Table -->
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h3 class="card-title mb-0">Admin Users</h3>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover">
+                        <thead>
+                            <tr>
+                                <th>Username</th>
+                                <th>User ID</th>
+                                <th>Email</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for username, user_id, email, status, is_admin in users %}
+                                {% if is_admin %}
+                                <tr>
+                                    <td>{{ username }}</td>
+                                    <td>{{ user_id }}</td>
+                                    <td>{{ email }}</td>
+                                    <td>
+                                        <span class="badge {% if status == 'active' %}bg-success{% else %}bg-secondary{% endif %}">
+                                            {{ status }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <div class="btn-group" role="group">
+                                            <form action="{{ url_for('edit', user_id=user_id) }}" method="GET" class="me-2">
+                                                <button type="submit" class="btn btn-primary btn-sm">Edit</button>
+                                            </form>
+                                            {% if email != session['user_id'] %}
+                                            <form action="{{ url_for('toggle_admin', user_id=user_id) }}" method="POST">
+                                                <button type="submit" class="btn btn-warning btn-sm">
+                                                    {% if is_admin %}Remove Admin{% else %}Make Admin{% endif %}
+                                                </button>
+                                            </form>
+                                            </form>
+                                            <form action="{{ url_for('delete', user_id=user_id) }}" method="POST">
+                                                <button type="submit" class="btn btn-danger btn-sm"
+                                                        onclick="return confirm('Are you sure you want to delete this admin?')"
+                                                        data-bs-toggle="tooltip"
+                                                        data-bs-placement="top"
+                                                        title="Delete Admin">
+                                                    Delete
+                                                </button>
+                                            </form>
+
+                                            {% endif %}
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endif %}
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Regular Users Table -->
+        <div class="card">
+            <div class="card-header bg-info text-white">
+                <h3 class="card-title mb-0">Regular Users</h3>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover">
+                        <thead>
+                            <tr>
+                                <th>Username</th>
+                                <th>User ID</th>
+                                <th>Email</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for username, user_id, email, status, is_admin in users %}
+                                {% if not is_admin %}
+                                <tr>
+                                    <td>{{ username }}</td>
+                                    <td>{{ user_id }}</td>
+                                    <td>{{ email }}</td>
+                                    <td>
+                                        <span class="badge {% if status == 'active' %}bg-success{% else %}bg-secondary{% endif %}">
+                                            {{ status }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        <div class="btn-group" role="group">
+                                            <form action="{{ url_for('edit', user_id=user_id) }}" method="GET" class="me-2">
+                                                <button type="submit" class="btn btn-primary btn-sm">Edit</button>
+                                            </form>
+                                            <form action="{{ url_for('toggle_admin', user_id=user_id) }}" method="POST" class="me-2">
+                                                <button type="submit" class="btn btn-warning btn-sm">
+                                                    Make Admin
+                                                </button>
+                                            </form>
+                                            <form action="{{ url_for('delete', user_id=user_id) }}" method="POST">
+                                                <button type="submit" class="btn btn-danger btn-sm"
+                                                        onclick="return confirm('Are you sure you want to delete this user?')"
+                                                        data-bs-toggle="tooltip"
+                                                        data-bs-placement="top"
+                                                        title="Delete User">
+                                                    Delete
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endif %}
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    </div>
+
+    <!-- Admin Modal -->
+    <div class="modal fade" id="addAdminModal" tabindex="-1" aria-labelledby="addAdminModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="addAdminModalLabel">Add New Admin</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form action="{{ url_for('add_admin') }}" method="POST">
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label for="email" class="form-label">Email:</label>
+                            <input type="email" class="form-control" id="email" name="email" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="username" class="form-label">Username:</label>
+                            <input type="text" class="form-control" id="username" name="username" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="password" class="form-label">Password:</label>
+                            <input type="password" class="form-control" id="password" name="password" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="confirm_password" class="form-label">Confirm Password:</label>
+                            <input type="password" class="form-control" id="confirm_password" name="confirm_password" required>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                        <button type="submit" class="btn btn-success">Add Admin</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap Bundle with Popper -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- Initialize Charts -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Growth Chart
+            const growthCtx = document.getElementById('growthChart').getContext('2d');
+            new Chart(growthCtx, {
+                type: 'line',
+                data: {
+                    labels: ['Oct', 'Nov', 'Dec', 'Jan', 'Feb'],
+                    datasets: [
+                        {
+                            label: 'Users',
+                            data: [0, 0, 0, 0, {{ stats.totalUsers }}],
+                            borderColor: 'rgb(75, 192, 192)',
+                            tension: 0.1
+                        },
+                        {
+                            label: 'Rides',
+                            data: [100, 150, 320, 350, {{ stats.monthlyRides }}],
+                            borderColor: 'rgb(255, 99, 132)',
+                            tension: 0.1
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+
+            // Distribution Chart
+            const distributionCtx = document.getElementById('distributionChart').getContext('2d');
+            new Chart(distributionCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Active Users', 'Inactive Users'],
+                    datasets: [{
+                        data: [{{ stats.activePercentage }}, {{ 100 - stats.activePercentage }}],
+                        backgroundColor: [
+                            'rgb(75, 192, 192)',
+                            'rgb(201, 203, 207)'
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+
+            // Initialize tooltips
+            var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+            var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+                return new bootstrap.Tooltip(tooltipTriggerEl)
+            });
+        });
+    </script>
+</body>
+</html>
