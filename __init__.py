@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, session, redirect, url_for, flash
-from forms import LoginForm, RegisterForm, EditUsernameForm, NumberOnlyValidator, FutureDateValidator, CreateDefectForm, UpdateDefectForm, DateSelectionForm, PaymentForm, BikeIDManagementForm, LockUnlockForm,  CreateBikeForm
+from forms import LoginForm, RegisterForm, EditUsernameForm, NumberOnlyValidator, FutureDateValidator, CreateDefectForm, UpdateDefectForm, DateSelectionForm, PaymentForm, BikeIDManagementForm, LockUnlockForm,  CreateBikeForm, CreateFAQForm, UpdateFAQForm
 import shelve
 import gpxpy
 import os
@@ -7,7 +7,7 @@ import logging
 from datetime import datetime
 from bikeclass import BikeProduct, Order, carparks, User
 from bikeclass import BikeDefect as createDefect
-
+from faq import FAQ
 from math import radians, sin, cos, sqrt, atan2
 import os
 import time
@@ -1473,7 +1473,6 @@ def create_defect():
             print("Error in retrieving Defects from defect.db.")
             defects_dict = {}
 
-        # Use createDefect directly to create a BikeDefect instance
         defect = createDefect(
             create_defect_form.bike_id.data,
             create_defect_form.defect_type.data,
@@ -1488,7 +1487,6 @@ def create_defect():
 
         return redirect(url_for('success'))
     return render_template('createDefect.html', form=create_defect_form)
-
 
 @app.route('/success')
 def success():
@@ -1713,6 +1711,116 @@ def initialize_user():
                 }
             }
     return redirect(url_for('user_dashboard'))
+
+@app.route('/createFAQ', methods=['GET', 'POST'])
+def create_faq():
+    create_faq_form = CreateFAQForm(request.form)
+    if request.method == 'POST' and create_faq_form.validate():
+        faqs_dict = {}
+        db = shelve.open('faq.db', 'c')
+
+        try:
+            faqs_dict = db['FAQs']
+        except:
+            print("Error in retrieving FAQs from faq.db.")
+
+        # Get the form data directly from the form fields
+        question = create_faq_form.question.data
+        answer = create_faq_form.answer.data
+
+        faq = FAQ(question, answer)
+
+        # Generate new ID
+        if len(faqs_dict) > 0:
+            faq.set_faq_id(max(faqs_dict.keys()) + 1)
+        else:
+            faq.set_faq_id(1)
+
+        faqs_dict[faq.get_faq_id()] = faq
+        db['FAQs'] = faqs_dict
+        db.close()
+
+        return redirect(url_for('retrieve_faqs'))
+    return render_template('createFAQ.html', form=create_faq_form)
+
+
+@app.route('/retrieveFAQ')
+def retrieve_faqs():
+    faqs_dict = {}
+    try:
+        db = shelve.open('faq.db', 'r')
+        faqs_dict = db['FAQs']
+        db.close()
+    except:
+        print("Error in retrieving FAQs from faq.db.")
+
+    faqs_list = []
+    for key in faqs_dict:
+        faq = faqs_dict.get(key)
+        faqs_list.append(faq)
+
+    return render_template('retrieveFAQ.html', faqs_list=faqs_list)
+
+
+@app.route('/updateFAQ/<int:id>/', methods=['GET', 'POST'])
+def update_faq(id):
+    update_faq_form = UpdateFAQForm(request.form)
+    if request.method == 'POST' and update_faq_form.validate():
+        faqs_dict = {}
+        db = shelve.open('faq.db', 'w')
+        faqs_dict = db['FAQs']
+
+        faq = faqs_dict.get(id)
+        faq.set_question(update_faq_form.question.data)
+        faq.set_answer(update_faq_form.answer.data)
+
+        db['FAQs'] = faqs_dict
+        db.close()
+
+        return redirect(url_for('retrieve_faqs'))
+    else:
+        faqs_dict = {}
+        db = shelve.open('faq.db', 'r')
+        faqs_dict = db['FAQs']
+        db.close()
+
+        faq = faqs_dict.get(id)
+        update_faq_form.question.data = faq.get_question()
+        update_faq_form.answer.data = faq.get_answer()
+
+        return render_template('updateFAQ.html', form=update_faq_form)
+
+
+@app.route('/deleteFAQ/<int:id>', methods=['POST'])
+def delete_faq(id):
+    faqs_dict = {}
+    db = shelve.open('faq.db', 'w')
+    faqs_dict = db['FAQs']
+
+    faqs_dict.pop(id)
+
+    db['FAQs'] = faqs_dict
+    db.close()
+
+    return redirect(url_for('retrieve_faqs'))
+
+
+@app.route('/faq')
+def faq():
+    faqs_dict = {}
+    try:
+        db = shelve.open('faq.db', 'r')
+        faqs_dict = db['FAQs']
+        db.close()
+    except:
+        print("Error in retrieving FAQs from faq.db.")
+
+    faqs_list = []
+    for key in faqs_dict:
+        faq = faqs_dict.get(key)
+        faqs_list.append(faq)
+
+    return render_template('faq.html', faqs_list=faqs_list)
 
 @app.errorhandler(404)
 def page_not_found(e):

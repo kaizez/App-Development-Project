@@ -98,12 +98,13 @@
               <span class="form-label-lg">{{ form.description.label.text }}:</span>
             </div>
             <div class="col-md-9">
-              {{ form.description(class="form-control form-control-lg text-center", placeholder="Enter Description of the Defect", rows="4") }}
+              {{ form.description(class="form-control form-control-lg text-center description-input", placeholder="Enter Description of the Defect", rows="4") }}
               {% if form.description.errors %}
                 {% for error in form.description.errors %}
                   <div class="text-danger">{{ error }}</div>
                 {% endfor %}
               {% endif %}
+              <div class="text-danger character-validation" style="display: none;">Please Elaborate</div>
             </div>
           </div>
         </div>
@@ -133,6 +134,7 @@
     display: block;
     text-align: center;
     margin-top: 0.25rem;
+    font-weight: bold;
   }
 
   .form-control-lg {
