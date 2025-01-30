@@ -5,9 +5,9 @@ import gpxpy
 import os
 import logging
 from datetime import datetime
-from bikeclass import BikeProduct, Order, carparks, User
+from bikeclass import BikeProduct, Order, carparks
 from bikeclass import BikeDefect as createDefect
-
+from User import User
 from math import radians, sin, cos, sqrt, atan2
 import os
 import time
@@ -1172,9 +1172,22 @@ def lock_success():
 
 
 #bryce
+#User-management
 
+# Configure logging
+logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
 
 db_path = os.path.join(os.getcwd(), 'users_db')
+
+rewards_db_path = 'rewards.db'
+
+REWARDS = {
+    'voucher': {'name': '$1 Voucher', 'cost': 100},
+    'reusable_bag': {'name': 'Reusable Bag', 'cost': 300},
+    'eco_plush': {'name': 'Eco-friendly Plush', 'cost': 500},
+    'keychain': {'name': 'Keychain', 'cost': 150},
+    'tree_donation': {'name': 'Tree Donation', 'cost': 100},
+}
 
 # Create the directory for the database if it doesn't exist
 os.makedirs(os.path.dirname(db_path), exist_ok=True)
@@ -1196,45 +1209,48 @@ def init_admin():
 
 @app.route('/')
 def home():
-    init_admin()  # Ensure admin initialization
-    if 'user_id' in session:  # Check if the user is logged in
-        if session.get('is_admin'):  # Admin users are redirected to the admin panel
-            return redirect(url_for('admin'))
-        # Regular logged-in users see the home page
+    try:
+        init_admin()  # Ensure admin initialization
+        if 'user_id' in session:
+            if session.get('is_admin'):
+                return redirect(url_for('admin'))
+            return render_template('home.html')
         return render_template('home.html')
-    # Non-logged-in users see the home page
-    return render_template('home.html')
+    except Exception as e:
+        logging.error(f"Unexpected error in home route: {e}")
+        flash("An unexpected error occurred.", "danger")
+        return redirect(url_for('home'))
 
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
-    if request.method == 'POST':
-        email = request.form['email']
-        password = request.form['password']
+    try:
+        if request.method == 'POST':
+            email = request.form['email']
+            password = request.form['password']
 
-        with shelve.open(db_path) as db:
-            user_data = db.get(email)
-            if not user_data:
-                flash('Email not found.', 'danger')
-                return redirect(url_for('login'))
+            with shelve.open(db_path) as db:
+                user_data = db.get(email)
+                if not user_data:
+                    flash('Email not found.', 'danger')
+                    return redirect(url_for('login'))
 
-            # Load user and validate password
-            user = User.from_dict(user_data)
-            if not user.check_password(password):
-                flash('Incorrect password.', 'danger')
-                return redirect(url_for('login'))
+                user = User.from_dict(user_data)
+                if not user.check_password(password):
+                    flash('Incorrect password.', 'danger')
+                    return redirect(url_for('login'))
 
-            # Set session variables
-            session['user_id'] = email
-            session['is_admin'] = user.is_admin()  # Determine if the user is an admin
-
-            # Redirect based on user role
-            if user.is_admin():
-                return redirect(url_for('admin'))  # Redirect to admin dashboard
-            else:
-                return redirect(url_for('user_dashboard'))  # Redirect to user dashboard
-
-    return render_template('login.html')  # Show login form for GET requests
+                session['user_id'] = email
+                session['is_admin'] = user.is_admin()
+                return redirect(url_for('admin' if user.is_admin() else 'user_dashboard'))
+        return render_template('login.html')
+    except IOError as e:
+        logging.error(f"Database read error: {e}")
+        flash("An error occurred while accessing user data.", "danger")
+    except Exception as e:
+        logging.error(f"Unexpected error in login route: {e}")
+        flash("An unexpected error occurred.", "danger")
+    return redirect(url_for('login'))
 
 
 @app.route('/logout')
@@ -1295,64 +1311,155 @@ def admin():
     if not session.get('is_admin'):
         return redirect(url_for('home'))
 
+    try:
+        with shelve.open(db_path) as db:
+            current_time = time.time()
+            users = []
+            regular_users_count = 0
+            active_users_count = 0
+            thirty_days_ago = current_time - (30 * 24 * 3600)
+            past_regular_count = 0
+            past_active_count = 0
+
+            for email, user_data in db.items():
+                user = User.from_dict(user_data)
+                is_active = (current_time - user.get_last_login()) <= (30 * 24 * 3600)
+                users.append((
+                    user.get_username(),
+                    user.get_user_id(),
+                    email,
+                    'active' if is_active else 'inactive',
+                    user.is_admin(),
+                    user.get_points()
+                ))
+
+                if not user.is_admin():
+                    regular_users_count += 1
+                    if is_active:
+                        active_users_count += 1
+                    if user.get_last_login() < thirty_days_ago:
+                        past_regular_count += 1
+                        if current_time - user.get_last_login() <= (60 * 24 * 3600):
+                            past_active_count += 1
+
+            try:
+                total_growth = int(((regular_users_count - past_regular_count) / max(past_regular_count, 1)) * 100)
+                active_growth = int(((active_users_count - past_active_count) / max(past_active_count, 1)) * 100)
+                current_month_rides = 680  # Placeholder value
+                last_month_rides = 354  # Placeholder value
+                rides_growth = int(((current_month_rides - last_month_rides) / max(last_month_rides, 1)) * 100)
+            except ZeroDivisionError:
+                flash("Insufficient data to calculate growth percentages.", "warning")
+                total_growth = active_growth = rides_growth = 0
+
+            stats = {
+                'totalUsers': regular_users_count,
+                'activeUsers': active_users_count,
+                'monthlyRides': current_month_rides,
+                'activePercentage': int(
+                    (active_users_count / regular_users_count * 100) if regular_users_count > 0 else 0),
+                'totalGrowth': total_growth,
+                'activeGrowth': active_growth,
+                'ridesGrowth': rides_growth
+            }
+        return render_template('admin.html', users=users, stats=stats)
+    except IOError as e:
+        logging.error(f"Database access error in admin: {e}")
+        flash("Error accessing the database.", "danger")
+    except Exception as e:
+        logging.error(f"Unexpected error in admin route: {e}")
+        flash("An unexpected error occurred.", "danger")
+    return redirect(url_for('home'))
+
+
+@app.route('/edit_points/<user_id>', methods=['POST'])
+def edit_points(user_id):
+    if not session.get('is_admin'):
+        return redirect(url_for('home'))
+
+    try:
+        with shelve.open(db_path) as db:
+            for email, user_data in db.items():
+                user = User.from_dict(user_data)
+                if user.get_user_id() == user_id:
+                    try:
+                        new_points = int(request.form['new_points'])
+                        user.set_points(new_points)
+                        db[email] = user.to_dict()
+                        flash(f"User points updated to {new_points}.")
+                    except ValueError:
+                        flash("Invalid point value. Please enter a valid number.", "danger")
+                    break
+    except IOError as e:
+        logging.error(f"Database access error in edit_points: {e}")
+        flash("Error accessing the database.", "danger")
+    except Exception as e:
+        logging.error(f"Unexpected error in edit_points: {e}")
+        flash("An unexpected error occurred.", "danger")
+
+    return redirect(url_for('admin'))
+
+
+
+@app.route('/rewards')
+def rewards():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
     with shelve.open(db_path) as db:
-        current_time = time.time()
-        users = []
-        regular_users_count = 0
-        active_users_count = 0
+        user_data = db[session['user_id']]
+        user = User.from_dict(user_data)
+        points = user.get_points()
 
-        # Get data from 30 days ago for comparison
-        thirty_days_ago = current_time - (30 * 24 * 3600)
-        past_regular_count = 0
-        past_active_count = 0
+    with shelve.open(rewards_db_path) as db:
+        history = db.get(session['user_id'], [])
 
-        for email, user_data in db.items():
-            user = User.from_dict(user_data)
-            is_active = (current_time - user.get_last_login()) <= (30 * 24 * 3600)
-            status = 'active' if is_active else 'inactive'
+    return render_template('rewards.html', points=points, rewards=REWARDS, history=history)
 
-            users.append((
-                user.get_username(),
-                user.get_user_id(),
-                email,
-                status,
-                user.is_admin()
-            ))
 
-            # Only count non-admin users for statistics
-            if not user.is_admin():
-                regular_users_count += 1
-                if is_active:
-                    active_users_count += 1
+@app.route('/redeem/<reward_type>', methods=['POST'])
+def redeem_reward(reward_type):
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
 
-                # Check if user was registered before 30 days ago
-                if user.get_last_login() < thirty_days_ago:
-                    past_regular_count += 1
-                    if current_time - user.get_last_login() <= (60 * 24 * 3600):  # Was active 30 days ago
-                        past_active_count += 1
+    if reward_type not in REWARDS:
+        flash('Invalid reward selection.', 'danger')
+        return redirect(url_for('rewards'))
 
-        # Calculate growth percentages
-        total_growth = int(((regular_users_count - past_regular_count) / max(past_regular_count, 1)) * 100)
-        active_growth = int(((active_users_count - past_active_count) / max(past_active_count, 1)) * 100)
+    cost = REWARDS[reward_type]['cost']
 
-        # Monthly rides calculation (you'll need to implement a proper ride tracking system)
-        # This is placeholder logic - replace with actual ride tracking
-        current_month_rides = 680  # Replace with actual ride count
-        last_month_rides = 354  # Replace with actual previous month count
-        rides_growth = int(((current_month_rides - last_month_rides) / max(last_month_rides, 1)) * 100)
+    with shelve.open(db_path, writeback=True) as db:
+        user_data = db[session['user_id']]
+        user = User.from_dict(user_data)
 
-        stats = {
-            'totalUsers': regular_users_count,
-            'activeUsers': active_users_count,
-            'monthlyRides': current_month_rides,
-            'activePercentage': int((active_users_count / regular_users_count * 100) if regular_users_count > 0 else 0),
-            'totalGrowth': total_growth,
-            'activeGrowth': active_growth,
-            'ridesGrowth': rides_growth
-        }
+        if not user.redeem_points(cost):
+            flash('Insufficient points.', 'danger')
+            return redirect(url_for('rewards'))
 
-    return render_template('admin.html', users=users, stats=stats)
+        db[session['user_id']] = user.to_dict()
 
+    with shelve.open(rewards_db_path, writeback=True) as db:
+        if session['user_id'] not in db:
+            db[session['user_id']] = []
+        db[session['user_id']].append({
+            'reward': REWARDS[reward_type]['name'],
+            'date': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'points_used': cost
+        })
+
+    flash(f'Successfully redeemed {REWARDS[reward_type]["name"]}!', 'success')
+    return redirect(url_for('rewards'))
+
+
+@app.route('/rewards/history')
+def rewards_history():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
+    with shelve.open(rewards_db_path) as db:
+        history = db.get(session['user_id'], [])
+
+    return render_template('history.html', history=history)
 @app.route('/edit/<user_id>', methods=['GET', 'POST'])
 def edit(user_id):
     if not session.get('is_admin'):

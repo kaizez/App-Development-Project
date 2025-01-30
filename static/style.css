@@ -319,3 +319,7 @@ padding: 1em;
 padding-left: 2em;
 padding-right: 2em;
 }
+
+.is-invalid {
+    border: 2px solid red !important;
+}
