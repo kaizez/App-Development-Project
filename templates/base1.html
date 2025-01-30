@@ -50,6 +50,27 @@
         crossorigin="anonymous"></script>
     {% endblock %}
 
+    <!-- Floating Chat Bubble -->
+    <div id="chat-container">
+        <div id="chat-bubble">💬</div>
+        <div id="chat-box">
+            <div id="chat-header">
+                Chat with AI
+                <span id="chat-close">&times;</span>
+            </div>
+            <div id="chat-messages"></div>
+            <div id="chat-input-container">
+                <input type="text" id="chat-input" placeholder="Type your message...">
+                <button id="chat-send">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Include Chatbot CSS & JS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/chatbot.css') }}">
+    <script src="{{ url_for('static', filename='js/chatbot.js') }}"></script>
+
+
 </body>
 
 </html>

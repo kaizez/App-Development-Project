@@ -1,6 +1,9 @@
-from flask import Flask, render_template, request, session, redirect, url_for, flash
+from flask import Flask, render_template, request, session, redirect, url_for, flash, Response, stream_with_context
 from forms import LoginForm, RegisterForm, EditUsernameForm, NumberOnlyValidator, FutureDateValidator, CreateDefectForm, UpdateDefectForm, DateSelectionForm, PaymentForm, BikeIDManagementForm, LockUnlockForm,  CreateBikeForm, CreateFAQForm, UpdateFAQForm
 import shelve
+import requests
+import json
+import re
 import gpxpy
 import os
 import logging
@@ -23,14 +26,81 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 ADMIN_EMAIL = 'bryceang2007@gmail.com'
 ADMIN_PASSWORD = 'ecobike'
 
+HEADERS = {
+    "Authorization": f"Bearer ",
+    "Content-Type": "application/json"
+}
+
+def clean_ai_response(text):
+    """Cleans up AI response by removing unwanted formatting and spaces"""
+    text = re.sub(r'\s+', ' ', text)  # Replace multiple spaces with a single space
+    text = re.sub(r'(```[\s\S]*?```)', '', text)  # Remove triple backtick code blocks
+    text = re.sub(r'[\*_#]', '', text)  # Remove Markdown symbols
+    return text.strip()
+
+def generate_response(user_prompt):
+    """Handles AI response streaming from external API with NO context memory"""
+    data = {
+    "model": AI_MODEL_NAME,
+    "prompt": f"This website is ecobike. I will NOT remember previous responses. Answer the following question independently: {user_prompt}",
+    "stream": True
+    }
+
+
+    try:
+        response = requests.post(AI_API_URL, headers=HEADERS, json=data, stream=True)
+
+        if response.status_code != 200:
+            yield "Error: AI server returned an invalid response."
+            return
+
+        buffer = ""
+        for line in response.iter_lines():
+            if request.environ.get('werkzeug.server.shutdown'):  # Detect if request was aborted
+                return
+
+            if line:
+                try:
+                    data = json.loads(line.decode('utf-8'))
+                    chunk_response = data.get('response', '')
+
+                    if chunk_response:
+                        buffer += chunk_response
+
+                        words = buffer.split()
+                        buffer = words.pop() if words and chunk_response[-1] != ' ' else ""
+
+                        for word in words:
+                            yield clean_ai_response(word) + " "
+
+                    if data.get('done'):
+                        if buffer:
+                            yield clean_ai_response(buffer)
+                        return
+
+                except json.JSONDecodeError:
+                    yield "Error: Failed to decode AI response."
+                    return
+
+    except requests.exceptions.RequestException as e:
+        yield f"Error: Could not reach AI API. {str(e)}"
+
+@app.route("/chatbot", methods=["POST"])
+def chatbot():
+    user_message = request.json.get("message", "").strip()
+    
+    if not user_message:
+        return Response("Please enter a message.", content_type="text/plain")
+
+    return Response(stream_with_context(generate_response(user_message)), content_type="text/plain")
+
 def load_env(file_path=".env"):
     try:
-        # Print full absolute path
         import os
         full_path = os.path.abspath(file_path)
         print(f"Attempting to load .env from: {full_path}")
         print(f"File exists: {os.path.exists(full_path)}")
-        
+
         with open(full_path, "r") as env_file:
             for line in env_file:
                 line = line.strip()
@@ -38,20 +108,24 @@ def load_env(file_path=".env"):
                     key, value = line.split("=", 1)
                     print(f"Loading: {key}={value}")
                     os.environ[key.strip()] = value.strip()
-        
-        # Verify API key is loaded
-        api_key = os.getenv("GOOGLE_MAPS_API_KEY")
-        print(f"Loaded API Key: {api_key}")
+
+        # Verify keys are loaded
+        print(f"Loaded Google Maps API Key: {os.getenv('GOOGLE_MAPS_API_KEY')}")
+        print(f"Loaded AI API URL: {os.getenv('AI_API_URL')}")
+        print(f"Loaded AI Model Name: {os.getenv('AI_MODEL_NAME')}")
+
     except Exception as e:
         print(f"Detailed Error: {e}")
         print(f"Error Type: {type(e)}")
-        
-        
+
 # Load the .env variables
 load_env()
 
 # Access the variables
 GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY")
+AI_API_URL = os.getenv("AI_API_URL")
+AI_API_KEY = os.getenv("AI_API_KEY")
+AI_MODEL_NAME = os.getenv("AI_MODEL_NAME")
 
 def initialize_bike_products():
     """Initialize the bike products database if it doesn't exist."""
