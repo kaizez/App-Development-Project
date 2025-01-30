@@ -86,9 +86,22 @@
                 </li>
 
                 <!-- FAQ -->
-                <li class="nav-item">
-                    <a class="nav-link" href="/contact-us">FAQ</a>
+                {% if session.get('is_admin') %}
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" id="faqDropdown" role="button"
+                       data-bs-toggle="dropdown" aria-expanded="false">
+                        FAQ
+                    </a>
+                    <ul class="dropdown-menu" aria-labelledby="faqDropdown">
+                        <li><a class="dropdown-item" href="/faq">View FAQ</a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><a class="dropdown-item" href="/createFAQ">Create FAQ</a></li>
+                        <li><a class="dropdown-item" href="/retrieveFAQ">Manage FAQs</a></li>
+                    </ul>
                 </li>
+            {%else%}
+            <a class="nav-link" href="/faq">FAQ</a>
+            {% endif %}
 
                 <li class="nav-item">
                     <a class="nav-link" href="/rewards">Rewards</a>

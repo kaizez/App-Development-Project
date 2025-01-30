@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, session, redirect, url_for, flash
-from forms import LoginForm, RegisterForm, EditUsernameForm, NumberOnlyValidator, FutureDateValidator, CreateDefectForm, UpdateDefectForm, DateSelectionForm, PaymentForm, BikeIDManagementForm, LockUnlockForm,  CreateBikeForm
+from forms import LoginForm, RegisterForm, EditUsernameForm, NumberOnlyValidator, FutureDateValidator, CreateDefectForm, UpdateDefectForm, DateSelectionForm, PaymentForm, BikeIDManagementForm, LockUnlockForm,  CreateBikeForm, CreateFAQForm, UpdateFAQForm
 import shelve
 import gpxpy
 import os
@@ -11,6 +11,7 @@ from User import User
 from math import radians, sin, cos, sqrt, atan2
 import os
 import time
+from faq import FAQ
 
 
 app = Flask(__name__)
@@ -1571,30 +1572,38 @@ def toggle_admin(user_id):
 def create_defect():
     create_defect_form = CreateDefectForm(request.form)
     if request.method == 'POST' and create_defect_form.validate():
-        defects_dict = {}
-        db = shelve.open('defect.db', 'c')
-
         try:
-            defects_dict = db['Defects']
-        except:
-            print("Error in retrieving Defects from defect.db.")
-            defects_dict = {}
-
-        # Use createDefect directly to create a BikeDefect instance
-        defect = createDefect(
-            create_defect_form.bike_id.data,
-            create_defect_form.defect_type.data,
-            create_defect_form.date_found.data,
-            create_defect_form.bike_location.data,
-            create_defect_form.severity.data,
-            create_defect_form.description.data
-        )
-        defects_dict[defect.get_report_id()] = defect
-        db['Defects'] = defects_dict
-        db.close()
-
-        return redirect(url_for('success'))
+            with shelve.open('defect.db', 'c') as db:
+                defects_dict = db.get('Defects', {})
+                defect = createDefect(
+                    create_defect_form.bike_id.data,
+                    create_defect_form.defect_type.data,
+                    create_defect_form.date_found.data,
+                    create_defect_form.bike_location.data,
+                    create_defect_form.severity.data,
+                    create_defect_form.description.data
+                )
+                defects_dict[defect.get_report_id()] = defect
+                db['Defects'] = defects_dict
+            flash("Defect reported successfully!", "success")
+            return redirect(url_for('success'))
+        except Exception as e:
+            logging.error(f"Error reporting defect: {e}")
+            flash("An error occurred while reporting the defect.", "error")
     return render_template('createDefect.html', form=create_defect_form)
+
+def load_env(file_path=".env"):
+    try:
+        with open(file_path, "r") as env_file:
+            for line in env_file:
+                line = line.strip()
+                if line and not line.startswith("#"):
+                    key, value = line.split("=", 1)
+                    os.environ[key.strip()] = value.strip()
+        app.config['GOOGLE_MAPS_API_KEY'] = os.getenv("GOOGLE_MAPS_API_KEY")  # Add API key to app config
+    except Exception as e:
+        print(f"Error loading environment variables: {e}")
+
 
 
 @app.route('/success')
@@ -1820,6 +1829,87 @@ def initialize_user():
                 }
             }
     return redirect(url_for('user_dashboard'))
+
+@app.route('/createFAQ', methods=['GET', 'POST'])
+def create_faq():
+    create_faq_form = CreateFAQForm(request.form)
+    if request.method == 'POST' and create_faq_form.validate():
+        faqs_dict = {}
+        db = shelve.open('faq.db', 'c')
+
+        try:
+            faqs_dict = db['FAQs']
+        except:
+            print("Error in retrieving FAQs from faq.db.")
+
+        question = create_faq_form.question.data
+        answer = create_faq_form.answer.data
+        faq = FAQ(question, answer)
+
+        # Set FAQ ID
+        faq.set_faq_id(max(faqs_dict.keys(), default=0) + 1)
+        faqs_dict[faq.get_faq_id()] = faq
+        db['FAQs'] = faqs_dict
+        db.close()
+
+        return redirect(url_for('retrieve_faqs'))
+    return render_template('createFAQ.html', form=create_faq_form)
+
+@app.route('/faq')
+def faq():
+    faqs_dict = {}
+    try:
+        db = shelve.open('faq.db', 'r')
+        faqs_dict = db['FAQs']
+        db.close()
+    except:
+        print("Error in retrieving FAQs from faq.db.")
+
+    faqs_list = [faqs_dict[key] for key in faqs_dict]
+    return render_template('faq.html', faqs_list=faqs_list)
+
+@app.route('/retrieveFAQ')
+def retrieve_faqs():
+    faqs_dict = {}
+    try:
+        db = shelve.open('faq.db', 'r')
+        faqs_dict = db['FAQs']
+        db.close()
+    except:
+        print("Error in retrieving FAQs from faq.db.")
+
+    faqs_list = [faqs_dict[key] for key in faqs_dict]
+    return render_template('retrieveFAQ.html', faqs_list=faqs_list)
+
+@app.route('/updateFAQ/<int:id>', methods=['GET', 'POST'])
+def update_faq(id):
+    update_faq_form = UpdateFAQForm(request.form)
+    if request.method == 'POST' and update_faq_form.validate():
+        db = shelve.open('faq.db', 'w')
+        faqs_dict = db['FAQs']
+        faq = faqs_dict[id]
+        faq.set_question(update_faq_form.question.data)
+        faq.set_answer(update_faq_form.answer.data)
+        db['FAQs'] = faqs_dict
+        db.close()
+        return redirect(url_for('retrieve_faqs'))
+
+    db = shelve.open('faq.db', 'r')
+    faqs_dict = db['FAQs']
+    faq = faqs_dict[id]
+    update_faq_form.question.data = faq.get_question()
+    update_faq_form.answer.data = faq.get_answer()
+    db.close()
+    return render_template('updateFAQ.html', form=update_faq_form)
+
+@app.route('/deleteFAQ/<int:id>', methods=['POST'])
+def delete_faq(id):
+    db = shelve.open('faq.db', 'w')
+    faqs_dict = db['FAQs']
+    faqs_dict.pop(id, None)
+    db['FAQs'] = faqs_dict
+    db.close()
+    return redirect(url_for('retrieve_faqs'))
 
 @app.errorhandler(404)
 def page_not_found(e):
