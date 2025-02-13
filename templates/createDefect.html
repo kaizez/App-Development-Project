@@ -64,7 +64,9 @@
               <span class="form-label-lg">{{ form.bike_location.label.text }}:</span>
             </div>
             <div class="col-md-9">
-              {{ form.bike_location(class="form-control form-control-lg text-center", placeholder="Enter Bike Location", rows="3") }}
+              <input type="text" name="bike_location" id="search_input"
+                class="form-control form-control-lg text-center"
+                placeholder="Enter Bike Location" required>
               {% if form.bike_location.errors %}
                 {% for error in form.bike_location.errors %}
                   <div class="text-danger">{{ error }}</div>
@@ -73,6 +75,11 @@
             </div>
           </div>
         </div>
+
+        <input type="hidden" id="latitude" name="latitude">
+        <input type="hidden" id="longitude" name="longitude">
+
+
 
         <div class="form-group mb-4">
           <div class="row align-items-center">
@@ -98,7 +105,9 @@
               <span class="form-label-lg">{{ form.description.label.text }}:</span>
             </div>
             <div class="col-md-9">
-              {{ form.description(class="form-control form-control-lg text-center", placeholder="Enter Description of the Defect", rows="4") }}
+            <textarea name="description" id="description" class="form-control form-control-lg text-center"
+                placeholder="Enter Description of the Defect" rows="4"></textarea>
+            <span id="descriptionError" class="text-danger" style="display: none;">Please elaborate on the defect</span>
               {% if form.description.errors %}
                 {% for error in form.description.errors %}
                   <div class="text-danger">{{ error }}</div>
@@ -181,4 +190,67 @@
     z-index: 1;
   }
 </style>
+
+<!-- Google Maps API Script  -->
+<script async
+    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBM2JF2FhKYKCmwvY3YFZUk2DNZL_drcA4&libraries=places&callback=initAutocomplete">
+</script>
+
+<!-- Autocomplete Script -->
+<script>
+function initAutocomplete() {
+    var searchInput = document.getElementById('search_input');
+
+    if (!searchInput) {
+        console.error("Search input field not found!");
+        return;
+    }
+
+    var autocomplete = new google.maps.places.Autocomplete(searchInput, {
+        types: ['geocode'],
+        componentRestrictions: { country: 'SG' }  // Restrict to Singapore
+    });
+
+    // Handle the selected place
+    autocomplete.addListener('place_changed', function () {
+        var place = autocomplete.getPlace();
+
+        if (!place.geometry) {
+            console.log("Place not found");
+            return;
+        }
+
+        // Get formatted address, latitude, and longitude
+        var formatted_address = place.formatted_address;
+        var latitude = place.geometry.location.lat();
+        var longitude = place.geometry.location.lng();
+
+        // Fill input field with formatted address
+        searchInput.value = formatted_address;
+
+        // Set hidden fields with lat/lng
+        document.getElementById("latitude").value = latitude;
+        document.getElementById("longitude").value = longitude;
+    });
+
+    // Prevent autocomplete from overriding input while typing
+    searchInput.addEventListener("keydown", function (event) {
+        if (event.key === "Enter") {
+            event.preventDefault();
+        }
+    });
+}
+
+// 🔽 Reinitialize Google Autocomplete when the form is reset or reloaded
+document.addEventListener("DOMContentLoaded", function () {
+    initAutocomplete(); // Initialize on page load
+
+    // If the form is reset (or a new form is opened), reinitialize autocomplete
+    document.querySelector("form").addEventListener("reset", function () {
+        setTimeout(initAutocomplete, 500); // Delay to allow form reset
+    });
+});
+</script>
+
+
 {% endblock %}

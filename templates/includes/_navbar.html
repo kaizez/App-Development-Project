@@ -37,19 +37,15 @@
                 {% endif %}
 
                 <!-- Dashboard -->
+                {% if session.get('is_admin') %}
                 <li class="nav-item">
-                    {% if session.get('is_admin') %}
-                    <div class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">Dashboard</a>
-                        <ul class="dropdown-menu">
-                            <li><a class="dropdown-item" href="/dashboard">View Dashboard</a></li>
-                            <li><a class="dropdown-item" href="/dashBoardAdmin">Upload GPX/XML</a></li>
-                        </ul>
-                    </div>
-                    {% else %}
-                    <a class="nav-link" href="/dashboard">Dashboard</a>
-                    {% endif %}
+                    <a class="nav-link" href="/dashBoardAdmin">Upload GPX/XML</a>
                 </li>
+                {% else %}
+                <li class="nav-item">
+                    <a class="nav-link" href="/dashboard">Dashboard</a>
+                </li>
+                {% endif %}
 
                 {% if session.get('is_admin') %}
                 <li class="nav-item">
@@ -78,6 +74,7 @@
                         <ul class="dropdown-menu">
                             <li><a class="dropdown-item" href="/createDefect">Create Defect</a></li>
                             <li><a class="dropdown-item" href="/retrieveDefect">Retrieve Defect</a></li>
+                            <li><a class="dropdown-item" href="/retrieveArchivedDefects">Retrieve Archive</a></li>
                         </ul>
                     </div>
                     {% else %}
@@ -105,6 +102,17 @@
 
                 <li class="nav-item">
                     <a class="nav-link" href="/rewards">Rewards</a>
+                </li>
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
+                        <img src="{{ url_for('static', filename='profile_pics/' + session.get('profile_picture', 'helmet_pfp.jpg')) }}"
+                             class="rounded-circle"
+                             style="width: 30px; height: 30px; object-fit: cover;">
+                    </a>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="{{ url_for('settings') }}">Settings</a></li>
+                        <li><a class="dropdown-item" href="{{ url_for('logout') }}">Logout</a></li>
+                    </ul>
                 </li>
             </ul>
 

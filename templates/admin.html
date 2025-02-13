@@ -92,16 +92,22 @@
         </div>
 
         <!-- Flash Messages -->
-        {% with messages = get_flashed_messages() %}
+        {% with messages = get_flashed_messages(with_categories=True) %}
             {% if messages %}
-                {% for message in messages %}
-                    <div class="alert alert-success alert-dismissible fade show" role="alert">
-                        {{ message }}
-                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                {% for category, message in messages %}
+                    <div class="alert
+                        {% if category == 'success' %} alert-success
+                        {% elif category == 'info' %} alert-primary
+                        {% elif category == 'danger' or category == 'error' %} alert-danger
+                        {% else %} alert-warning {% endif %}
+                        alert-dismissible fade show text-center" role="alert">
+                        <strong>{{ message }}</strong>
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                     </div>
                 {% endfor %}
             {% endif %}
         {% endwith %}
+
 
         <!-- Admin Users Table -->
         <div class="card mb-4">
@@ -170,6 +176,8 @@
                 </div>
             </div>
         </div>
+        <!-- Button to Redirect to View Users Page -->
+        <a href="{{ url_for('view_users') }}" class="btn btn-primary mb-3" id="view_users">View Users</a>
 
         <!-- Regular Users Table -->
         <div class="card">

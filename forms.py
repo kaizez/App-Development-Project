@@ -4,11 +4,14 @@ from wtforms.validators import DataRequired, Email, EqualTo, Length, ValidationE
 from wtforms import Form, StringField, RadioField, SelectField, TextAreaField, validators, DecimalField, FileField, IntegerField
 from wtforms.fields import EmailField, DateField
 from datetime import datetime
+from flask_wtf.file import FileAllowed, FileRequired
 import email_validator
 import re
 import requests
 import shelve
 from flask import current_app
+from flask import request
+
 
 class LoginForm(FlaskForm):
     email = StringField('Email', validators=[DataRequired(message="email is required"), Email(message="Please enter a valid email")])
@@ -100,57 +103,52 @@ class CreateDefectForm(Form):
                                    ('X', 'Not so serious')],
                           default='N')
 
-    description = TextAreaField('Description',
-                                [validators.DataRequired()])
+    description = TextAreaField('Description', [
+        validators.DataRequired(message="Description is required."),
+        validators.Length(min=10, message="Elaborate on the defect")
+    ])
 
     def validate_bike_location(self, field):
         address = field.data
-        api_key = current_app.config.get('GOOGLE_MAPS_API_KEY')  # Ensure the API key is configured
+        api_key = current_app.config.get('GOOGLE_MAPS_API_KEY')
 
-        # List of known Singapore locations (can be expanded)
-        valid_general_locations = [
-            "Choa Chu Kang", "Ang Mo Kio", "Pasir Ris", "Jurong East", "Jurong West",
-            "Bukit Batok", "Tampines", "Punggol", "Sengkang", "Yishun", "Woodlands",
-            "Bedok", "Clementi", "Queenstown", "Toa Payoh", "Serangoon", "Changi",
-            "Bukit Gombak", "Abingdon Road", "Adam Drive", "Adam Park", "Adam Road", "Adis Road",
-            "Admiralty Drive", "Admiralty Lane", "Admiralty Link", "Admiralty Road East", "Admiralty Road West",
-            "Admiralty Road", "Admiralty Street", "Ah Hood Road", "Ah Soo Garden", "Ah Soo Walk", "Aida Street", "Airline Road",
-            "Airport Boulevard", "Airport Cargo Road", "Akyab Road", "Albert Street", "Alexandra Lane", "Alexandra Road",
-            "Alexandra Terrace", "Aliwal Street", "Aljunied Avenue 1", "Aljunied Avenue 2", "Aljunied Avenue 3",
-            "Aljunied Avenue 4", "Aljunied Avenue 5", "Aljunied Crescent", "Aljunied Road", "Alkaff Avenue",
-            "Allamanda Grove", "Allanbrooke Road", "Allenby Road", "Almond Avenue", "Almond Crescent",
-            "Almond Street", "Alnwick Road", "Ama Keng Road", "Amber Close", "Amber Gardens", "Amber Road",
-            "Amberwood Close 1", "Amberwood Close 2", "Amberwood Close 3", "Amberwood Close 4", "Amberwood Close 5",
-            "Amoy Street", "Anamalai Avenue", "Anchorvale Crescent", "Anchorvale Drive", "Anchorvale Lane",
-            "Anchorvale Link", "Anchorvale Street", "Anderson Road", "Andover Road", "Andrew Avenue", "Andrew Road",
-            "Ang Mo Kio Avenue 1", "Ang Mo Kio Avenue 10", "Ang Mo Kio Avenue 12", "Ang Mo Kio Avenue 2",
-            "Ang Mo Kio Avenue 3", "Ang Mo Kio Avenue 4", "Ang Mo Kio Avenue 5", "Ang Mo Kio Avenue 6",
-            "Ang Mo Kio Avenue 7", "Ang Mo Kio Avenue 8", "Ang Mo Kio Avenue 9", "Ang Mo Kio Central 1",
-            "Ang Mo Kio Central 2", "Ang Mo Kio Central 2A", "Ang Mo Kio Central 3", "Ang Mo Kio Industrial Park 1",
-            "Ang Mo Kio Industrial Park 2", "Ang Mo Kio Industrial Park 2A", "Ang Mo Kio Industrial Park 3",
-            "Ang Mo Kio Street 11", "Ang Mo Kio Street 12", "Ang Mo Kio Street 13", "Ang Mo Kio Street 21",
-            "Ang Mo Kio Street 22", "Ang Mo Kio Street 23", "Ang Mo Kio Street 24", "Ang Mo Kio Street 31", "Ang Mo Kio Street 32", "Ang Mo Kio Street 41", "Ang Mo Kio Street 42", "Ang Mo Kio Street 43", "Ang Mo Kio Street 4451", "Ang Mo Kio Street 52", "Ang Mo Kio Street 53", "Ang Mo Kio Street 54", "Ang Mo Kio Street 61", "Ang Mo Kio Street 62", "Ang Mo Kio Street 63", "Ang Mo Kio Street 64", "Ang Mo Kio Street 65", "Angklong Lane", "Angora Close", "Angsana Avenue", "Angullia Park", "Angus Street", "Ann Siang Hill", "Ann Siang Road", "Anson Road", "Anthony Road", "Arab Street", "Arcadia Road", "Architecture Drive", "Ardmore Park", "Armenian Street", "Arnasalam Chetty Road", "Aroozoo Avenue", "Aroozoo Lane", "Arthur Road", "Artillery Avenue", "Artillery Close", "Artillery Link", "Arts Link", "Arumugam Road", "Ascot Rise", "Ash Grove", "Ashwood Grove", "Asimont Lane", "Astrid Hill", "Attap Valley Road", "Auckland Road East", "Auckland Road West", "Ava Road", "Aviation Drive", "Avon Road", "Ayer Rajah Avenue", "Ayer Rajah Crescent",
+        # Extract latitude & longitude from the request form (set by JS)
+        lat = request.form.get("latitude")
+        lng = request.form.get("longitude")
 
-        ]
+        # If lat/lng exist, it means the user selected an address from Autocomplete
+        if lat and lng:
+            return  # ✅ Valid address from Google Autocomplete, no need for further validation
 
-        # First, check if the address matches a known general location
-        if address in valid_general_locations:
-            return  # Address is valid
+        # If no lat/lng, validate address using Google Maps Geocoding API
+        try:
+            response = requests.get(
+                "https://maps.googleapis.com/maps/api/geocode/json",
+                params={
+                    "address": address,
+                    "components": "country:SG",  # Restrict to Singapore
+                    "key": api_key
+                }
+            )
 
-        # Otherwise, validate using Google Maps Geocoding API
-        response = requests.get(
-            "https://maps.googleapis.com/maps/api/geocode/json",
-            params={"address": address, "key": api_key}
-        )
-        data = response.json()
-        if response.status_code != 200 or data.get('status') != 'OK':
-            raise ValidationError("Invalid address. Please enter a valid location in Singapore.")
+            if response.status_code == 200:
+                data = response.json()
 
-        # Ensure the address is in Singapore
-        if not any("Singapore" in comp.get('long_name', '') for result in data['results'] for comp in result.get('address_components', [])):
-            raise ValidationError("Location must be in Singapore. Please enter a valid Singapore address.")
+                if data.get('status') == 'OK':
+                    result = data['results'][0]
 
+                    # Ensure the result is a valid address in Singapore
+                    address_components = result.get('address_components', [])
+                    for component in address_components:
+                        if 'country' in component.get('types', []) and component.get('short_name') == 'SG':
+                            return  # ✅ Valid address found
 
+                    raise ValidationError("Location must be a valid address in Singapore.")
+
+                raise ValidationError("Invalid address. Please select a valid address from suggestions.")
+
+        except requests.RequestException:
+            raise ValidationError("Unable to validate location. Please try again.")
 
     def validate_bike_id(self, field):
         bike_id = field.data
@@ -250,14 +248,15 @@ class BikeIDManagementForm(FlaskForm):
 
     
 class CreateBikeForm(Form):
-
-    bike_name = StringField("Bike Name: ", [validators.Length(min=1, max=50), validators.DataRequired()])
-    upload_bike_image = FileField("Bike Upload: ", )
-    price = DecimalField("Price $: ", [validators.NumberRange(min=1, message="Price must be greater than 0"), validators.DataRequired()])
-    transmission_type = SelectField("Transmission Type: ", choices=[("Manual", "Manual"), ("Automatic", "Automatic")], validators=[validators.DataRequired()])
-    seating_capacity = SelectField("Seating Capacity: ", choices=[("1", "1 Seat"), ("2", "2 Seats")], default="1", validators=[validators.DataRequired()])
-    engine_output = StringField("Engine Output (W): ", [validators.DataRequired()])
-    stock_quantity = IntegerField('Stock Quantity', validators=[validators.DataRequired(), validators.NumberRange(min=0)])
+    bike_name = StringField("Bike Name", [validators.Length(min=1, max=50), validators.DataRequired()])
+    upload_bike_image = FileField("Bike Upload", validators=[
+        FileAllowed(['jpg', 'jpeg', 'png'], "Only JPG and PNG images are allowed!"),
+    ])
+    price = DecimalField("Price $", [validators.NumberRange(min=1, message="Price must be greater than 0"), validators.DataRequired()])
+    transmission_type = SelectField("Transmission Type", choices=[("Manual", "Manual"), ("Automatic", "Automatic")], validators=[validators.DataRequired()])
+    seating_capacity = SelectField("Seating Capacity", choices=[("1", "1 Seat"), ("2", "2 Seats")], default="1", validators=[validators.DataRequired()])
+    engine_output = StringField("Engine Output (W)", [validators.DataRequired()])
+    stock_quantity = IntegerField('Stock Quantity', validators=[validators.DataRequired(), validators.NumberRange(min=1)])
 
 class CreateFAQForm(Form):
     question = StringField('Question', [validators.Length(min=1, max=150), validators.DataRequired()])
@@ -266,3 +265,4 @@ class CreateFAQForm(Form):
 class UpdateFAQForm(Form):
     question = StringField('Question', [validators.Length(min=1, max=150), validators.DataRequired()])
     answer = TextAreaField('Answer', [validators.Length(min=1), validators.DataRequired()])
+

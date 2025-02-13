@@ -1,5 +1,15 @@
 from flask import Flask, render_template, request, session, redirect, url_for, flash, Response, stream_with_context
 from forms import LoginForm, RegisterForm, EditUsernameForm, NumberOnlyValidator, FutureDateValidator, CreateDefectForm, UpdateDefectForm, DateSelectionForm, PaymentForm, BikeIDManagementForm, LockUnlockForm,  CreateBikeForm, CreateFAQForm, UpdateFAQForm
+from google.auth import exceptions
+from google_auth_oauthlib.flow import Flow
+from google.oauth2 import id_token
+import google.auth.transport.requests
+from googleapiclient.discovery import build
+import base64
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from werkzeug.utils import secure_filename
+import random
 import shelve
 import requests
 import json
@@ -10,21 +20,39 @@ import logging
 from datetime import datetime
 from bikeclass import BikeProduct, Order, carparks
 from bikeclass import BikeDefect as createDefect
-from User import User
+from User import User, Reward
 from math import radians, sin, cos, sqrt, atan2
 import os
 import time
 from faq import FAQ
 
+os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'  # ✅ Allow HTTP in Development Mode
 
 app = Flask(__name__)
 app.secret_key = 'your_secret_key'
 
 UPLOAD_FOLDER = 'static/uploads'
+UPLOAD_FOLDER_PROFILE = 'static/profile_pics'
+
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
+
+# Load Gmail API Credentials (Replace with your downloaded JSON file)
+GOOGLE_CLIENT_SECRET_FILE = "client_secret.json"
+GOOGLE_LOGIN_SCOPES = [
+    "openid",
+    "https://www.googleapis.com/auth/userinfo.email",
+    "https://www.googleapis.com/auth/userinfo.profile"
+]
+
+
+GOOGLE_GMAIL_SCOPES = ["https://www.googleapis.com/auth/gmail.send"]
+GOOGLE_REDIRECT_URI = "http://127.0.0.1:5000/google/callback"
 
 ADMIN_EMAIL = 'bryceang2007@gmail.com'
 ADMIN_PASSWORD = 'ecobike'
+#App password for google: "eesm lpxo pgzm hfcb"
 
 HEADERS = {
     "Authorization": f"Bearer ",
@@ -383,7 +411,6 @@ def create_bike():
     return render_template('createBike.html', form=create_bike_form)
 
 
-
 @app.route('/retrieveBikes')
 def retrieve_bikes():
     bikes_dict = get_bike_data()
@@ -573,8 +600,8 @@ def reset_dashboard():
 def add_to_cart(bike_id):
     try:
         with shelve.open('bike.db', 'c') as db:
-            if 'Bikes' not in db:  # If database is empty
-                initialize_bike_products()  # Reinitialize
+            if 'Bikes' not in db:
+                initialize_bike_products()
             bikes = db.get('Bikes', {})
             bike = bikes.get(bike_id)
 
@@ -583,11 +610,9 @@ def add_to_cart(bike_id):
             return redirect(url_for('view_bikes'))
 
         with shelve.open('cart.db', 'c') as db:
-            cart = db.get('cart', {})
-            if bike_id in cart:
-                cart[bike_id]['quantity'] += 1
-            else:
-                cart[bike_id] = {'bike': bike, 'quantity': 1}
+            # Create a new cart with only the latest item
+            cart = {}
+            cart[bike_id] = {'bike': bike, 'quantity': 1}
             db['cart'] = cart
 
         flash("Bike added to cart successfully!", "success")
@@ -597,7 +622,7 @@ def add_to_cart(bike_id):
         logging.error(f"Error in add_to_cart: {e}")
         flash("Error adding bike to cart", "error")
         return redirect(url_for('view_bikes'))
-    
+        
 @app.route('/checkout', methods=['GET', 'POST'])
 def checkout():
     form = DateSelectionForm()
@@ -929,30 +954,40 @@ def initialize_bike_ids():
         # Open or create bike_ids.db
         with shelve.open('bike_ids.db', 'c') as bike_id_db:
             bike_ids = bike_id_db.get('bike_ids', {})
-
-            # Initialize bike IDs if not already present
+            
+            # Create a set of all current unique IDs
+            current_ids = set()
+            
+            # Update existing entries and add new ones
             for bike_id, bike in bikes.items():
                 bike_name = bike['bike_name']
                 stock_quantity = bike['stock_quantity']
-
-                # Generate a unique Bike ID (e.g., first 3 letters of the name + an ID)
                 unique_id = f"{bike_name[:3].upper()}-{bike_id:03d}"
-
-                if unique_id not in bike_ids:
-                    bike_ids[unique_id] = {
-                        'name': bike_name,
-                        'stock': stock_quantity,
-                        'rental': 0,
-                    }
-                    print(f"Added new bike: {unique_id} with stock {stock_quantity}")
+                current_ids.add(unique_id)
+                
+                # Update existing or add new entry
+                bike_ids[unique_id] = {
+                    'name': bike_name,
+                    'stock': stock_quantity,
+                    # Preserve rental count if entry exists, otherwise initialize to 0
+                    'rental': bike_ids.get(unique_id, {}).get('rental', 0)
+                }
+                print(f"Updated/Added bike: {unique_id} with stock {stock_quantity}")
+            
+            # Remove entries that no longer exist in bikes.db
+            ids_to_remove = [id_string for id_string in bike_ids.keys() 
+                           if id_string not in current_ids]
+            for id_string in ids_to_remove:
+                del bike_ids[id_string]
+                print(f"Removed obsolete bike ID: {id_string}")
 
             # Save back to the database
             bike_id_db['bike_ids'] = bike_ids
 
-        flash("Bike IDs initialized or updated successfully!", "success")
+        flash("Bike IDs synchronized successfully!", "success")
     except Exception as e:
-        logging.error(f"Error initializing bike IDs: {e}")
-        flash("Error initializing bike IDs", "error")
+        logging.error(f"Error synchronizing bike IDs: {e}")
+        flash("Error synchronizing bike IDs", "error")
 
     return redirect(url_for('manage_ids'))
 
@@ -1256,16 +1291,137 @@ db_path = os.path.join(os.getcwd(), 'users_db')
 
 rewards_db_path = 'rewards.db'
 
-REWARDS = {
-    'voucher': {'name': '$1 Voucher', 'cost': 100},
-    'reusable_bag': {'name': 'Reusable Bag', 'cost': 300},
-    'eco_plush': {'name': 'Eco-friendly Plush', 'cost': 500},
-    'keychain': {'name': 'Keychain', 'cost': 150},
-    'tree_donation': {'name': 'Tree Donation', 'cost': 100},
-}
+# Ensure the credentials JSON file exists
+if not os.path.exists(GOOGLE_CLIENT_SECRET_FILE):
+    raise FileNotFoundError("Google Client Secret file not found!")
 
-# Create the directory for the database if it doesn't exist
-os.makedirs(os.path.dirname(db_path), exist_ok=True)
+def get_google_login_flow():
+    return Flow.from_client_secrets_file(
+        GOOGLE_CLIENT_SECRET_FILE,
+        scopes=GOOGLE_LOGIN_SCOPES,
+        redirect_uri=GOOGLE_REDIRECT_URI
+    )
+
+def get_gmail_flow():
+    return Flow.from_client_secrets_file(
+        GOOGLE_CLIENT_SECRET_FILE,
+        scopes=GOOGLE_GMAIL_SCOPES,
+        redirect_uri="http://127.0.0.1:5000/gmail/callback"
+    )
+
+
+# ✅ Google Login Route
+@app.route("/login/google")
+def google_login():
+    """Redirects the user to Google's OAuth consent screen for login."""
+    flow = get_google_login_flow()  # ✅ Initialize flow correctly
+    authorization_url, state = flow.authorization_url()
+    session["state"] = state  # ✅ Store state for security
+    return redirect(authorization_url)
+
+
+# ✅ Google Login Callback Route
+@app.route("/google/callback")
+def google_callback():
+    try:
+        # ✅ Ensure a new OAuth flow instance is created
+        flow = get_google_login_flow()
+
+        # ✅ Fetch token correctly
+        flow.fetch_token(authorization_response=request.url)
+
+        # ✅ Retrieve token credentials
+        credentials = flow.credentials
+        request_session = google.auth.transport.requests.Request()
+
+        # ✅ Adjust for clock skew to prevent timing errors
+        id_info = id_token.verify_oauth2_token(
+            credentials.id_token,
+            request_session,
+            flow.client_config["client_id"],
+            clock_skew_in_seconds=10  # ✅ Allow up to 10 seconds time difference
+        )
+
+        # ✅ Extract user information from Google token
+        google_email = id_info["email"]
+        google_name = id_info["name"]
+        google_picture = id_info.get("picture", "default.jpg")
+
+        # ✅ Store user information in session
+        session["user_id"] = google_email
+        session["username"] = google_name
+        session["profile_picture"] = google_picture
+        session["is_admin"] = False  # Default role
+
+        # ✅ Store user in database if they don’t exist
+        with shelve.open("users_db", writeback=True) as db:
+            if google_email not in db:
+                db[google_email] = {
+                    "email": google_email,
+                    "username": google_name,
+                    "profile_picture": google_picture,
+                    "is_admin": False
+                }
+
+        flash("Successfully logged in with Google!", "success")
+        return redirect(url_for("user_dashboard"))
+
+    except google.auth.exceptions.InvalidValue as e:
+        flash(f"Google login failed: {e}", "danger")
+        return redirect(url_for("login"))
+
+    except Exception as e:
+        flash(f"An unexpected error occurred: {e}", "danger")
+        return redirect(url_for("login"))
+
+
+
+# ✅ Google Gmail API Callback Route
+@app.route("/authorize_gmail")
+def authorize_gmail():
+    """Redirects the user to Google's OAuth consent screen for Gmail API authorization."""
+    flow = get_gmail_flow()
+    authorization_url, state = flow.authorization_url()
+    session["state"] = state  # ✅ Store state for security
+    return redirect(authorization_url)
+
+@app.route("/gmail/callback")
+def gmail_callback():
+    """Handles Gmail API authentication and stores credentials."""
+    try:
+        flow = get_gmail_flow()
+        flow.fetch_token(authorization_response=request.url)
+        credentials = flow.credentials
+
+        # ✅ Ensure credentials are not None before saving
+        if not credentials or not credentials.token:
+            flash("Failed to retrieve credentials. Try again.", "danger")
+            return redirect(url_for("authorize_gmail"))
+
+        session["gmail_credentials"] = {
+            "token": credentials.token,
+            "refresh_token": credentials.refresh_token,
+            "token_uri": credentials.token_uri,
+            "client_id": credentials.client_id,
+            "client_secret": credentials.client_secret,
+            "scopes": credentials.scopes
+        }
+
+        # ✅ Save Gmail API credentials
+        with shelve.open("users_db", writeback=True) as db:
+            user_data = db.get(session.get("user_id"), {})
+            user_data["gmail_credentials"] = session["gmail_credentials"]
+            db[session.get("user_id")] = user_data
+
+        flash("Google Gmail API Access Granted!", "success")
+        return redirect(url_for("forgot_password"))
+
+    except Exception as e:
+        flash(f"Gmail API authorization failed: {e}", "danger")
+        return redirect(url_for("forgot_password"))
+
+
+
 
 def datenow():
     return str(int(time.time()))
@@ -1281,6 +1437,9 @@ def init_admin():
     except Exception as e:
         print(f"Error initializing admin: {str(e)}")
 
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
 
 @app.route('/')
 def home():
@@ -1295,6 +1454,55 @@ def home():
         logging.error(f"Unexpected error in home route: {e}")
         flash("An unexpected error occurred.", "danger")
         return redirect(url_for('home'))
+
+@app.route('/settings', methods=['GET', 'POST'])
+def settings():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
+    with shelve.open('users_db', writeback=True) as db:
+        user_data = db.get(session['user_id'])
+
+        if not user_data:
+            flash("User not found. Please log in again.", "danger")
+            return redirect(url_for('login'))
+
+        user = User.from_dict(user_data)
+
+        if request.method == 'POST':
+            if 'profile_picture' not in request.files:
+                flash('No file selected.', 'danger')
+                return redirect(url_for('settings'))
+
+            file = request.files['profile_picture']
+            if file.filename == '':
+                flash('No file selected.', 'danger')
+                return redirect(url_for('settings'))
+
+            if file and allowed_file(file.filename):
+                # ✅ Delete old profile picture if it exists
+                old_picture = user.get_profile_picture()
+                old_picture_path = os.path.join('static/profile_pics', old_picture)
+                if os.path.exists(old_picture_path) and old_picture != "helmet_pfp.jpg":
+                    os.remove(old_picture_path)
+
+                # ✅ Save new profile picture using user_id instead of email
+                file_extension = file.filename.rsplit('.', 1)[1].lower()
+                filename = secure_filename(f"{session['user_id']}.{file_extension}")
+                file_path = os.path.join('static/profile_pics', filename)
+                file.save(file_path)
+
+                # ✅ Update user profile picture in database
+                user.set_profile_picture(filename)
+                db[session['user_id']] = user.to_dict()
+
+                # ✅ Refresh session with the new profile picture
+                session['profile_picture'] = filename
+
+                flash('Profile picture updated successfully!', 'success')
+                return redirect(url_for('settings'))
+
+    return render_template('settings.html', user=user)
 
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -1315,23 +1523,195 @@ def login():
                     flash('Incorrect password.', 'danger')
                     return redirect(url_for('login'))
 
+                # ✅ Store profile picture in session
                 session['user_id'] = email
                 session['is_admin'] = user.is_admin()
+                session['profile_picture'] = user.get_profile_picture()  # ✅ Ensure profile picture persists
+
                 return redirect(url_for('admin' if user.is_admin() else 'user_dashboard'))
+
         return render_template('login.html')
+
     except IOError as e:
         logging.error(f"Database read error: {e}")
         flash("An error occurred while accessing user data.", "danger")
     except Exception as e:
         logging.error(f"Unexpected error in login route: {e}")
         flash("An unexpected error occurred.", "danger")
+
     return redirect(url_for('login'))
 
 
-@app.route('/logout')
+def authenticate_gmail():
+    """Authenticate using OAuth 2.0 and return a Gmail API service."""
+    flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_FILE, SCOPES)
+    creds = flow.run_local_server(port=0)  # Opens a browser for authentication
+    return build('gmail', 'v1', credentials=creds)
+
+
+# ✅ Send Email Using Gmail API
+def send_email_gmail(to_email, subject, body):
+    """Send an email using the Gmail API."""
+    credentials_data = session.get("gmail_credentials")
+    if not credentials_data:
+        flash("Please authorize Gmail API first!", "warning")
+        return False
+
+    try:
+        credentials = google.oauth2.credentials.Credentials(**credentials_data)
+        service = build("gmail", "v1", credentials=credentials)
+
+        message = MIMEMultipart()
+        message["to"] = to_email
+        message["subject"] = subject
+        message.attach(MIMEText(body, "plain"))
+
+        raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
+        service.users().messages().send(userId="me", body={"raw": raw_message}).execute()
+
+        flash("OTP has been sent successfully!", "success")
+        return True
+
+    except Exception as e:
+        flash(f"Failed to send OTP: {e}", "danger")
+        return False
+
+
+
+@app.route("/forgot_password", methods=["GET", "POST"])
+def forgot_password():
+    if request.method == "POST":
+        email = request.form["email"]
+
+        # ✅ Ensure Gmail API is authorized before sending OTP
+        if "gmail_credentials" not in session:
+            flash("Please authorize Gmail API first!", "warning")
+            return redirect(url_for("authorize_gmail"))
+
+        if send_otp(email):
+            return redirect(url_for("verify_otp"))
+
+    return render_template("forgot_password.html")
+
+
+def send_otp(email):
+    """Sends OTP via Gmail API if authorized and stores it in session."""
+    if "gmail_credentials" not in session:
+        flash("Please authorize Gmail API first!", "warning")
+        return False
+
+    try:
+        credentials = google.oauth2.credentials.Credentials(**session["gmail_credentials"])
+        service = build("gmail", "v1", credentials=credentials)
+
+        otp = str(random.randint(100000, 999999))  # ✅ Generate OTP
+        session["otp"] = otp
+        session["otp_email"] = email
+        session["otp_expiry"] = time.time() + 300  # ✅ OTP expires in 5 minutes
+
+        # ✅ Construct email message
+        message = MIMEMultipart()
+        message["to"] = email
+        message["subject"] = "Your Ecobike OTP"
+        body = f"Your OTP for password reset is: {otp}\nThis OTP will expire in 5 minutes."
+        message.attach(MIMEText(body, "plain"))
+
+        encoded_message = base64.urlsafe_b64encode(message.as_bytes()).decode()
+        service.users().messages().send(userId="me", body={"raw": encoded_message}).execute()
+
+        flash("OTP sent successfully! Check your email.", "success")
+        return True
+
+    except Exception as e:
+        flash(f"Failed to send OTP: {e}", "danger")
+        return False
+
+
+
+@app.route("/verify_otp", methods=["GET", "POST"])  # ✅ Ensure GET & POST are allowed
+def verify_otp():
+    """Verifies the OTP entered by the user."""
+    if request.method == "GET":
+        return render_template("verify_otp.html")  # ✅ Render OTP form for GET requests
+
+    entered_otp = request.form.get("otp")  # ✅ Retrieve entered OTP
+
+    # ✅ Ensure OTP exists in session
+    if "otp" not in session or "otp_email" not in session or "otp_expiry" not in session:
+        flash("OTP expired or not found. Please request a new one.", "danger")
+        return redirect(url_for("forgot_password"))
+
+    # ✅ Ensure OTP has not expired
+    if time.time() > session["otp_expiry"]:
+        flash("OTP has expired. Please request a new one.", "danger")
+        session.pop("otp", None)  # Remove expired OTP
+        session.pop("otp_email", None)
+        session.pop("otp_expiry", None)
+        return redirect(url_for("forgot_password"))
+
+    # ✅ Verify OTP
+    if entered_otp != session["otp"]:
+        flash("Invalid OTP. Please try again.", "danger")
+        return redirect(url_for("verify_otp"))
+
+    # ✅ OTP is correct, proceed to reset password
+    flash("OTP verified successfully! You may now reset your password.", "success")
+    return redirect(url_for("reset_password"))
+
+
+
+
+@app.route("/reset_password", methods=["GET", "POST"])
+def reset_password():
+    """Allows users to reset their password after OTP verification."""
+    if "otp_email" not in session:
+        flash("Session expired. Please request a new OTP.", "danger")
+        return redirect(url_for("forgot_password"))
+
+    if request.method == "POST":
+        new_password = request.form.get("password")
+        confirm_password = request.form.get("confirm_password")
+
+        # ✅ Ensure passwords match
+        if new_password != confirm_password:
+            flash("Passwords do not match!", "danger")
+            return redirect(url_for("reset_password"))
+
+        # ✅ Retrieve user from the database
+        with shelve.open("users_db", writeback=True) as db:
+            if session["otp_email"] not in db:
+                flash("User not found.", "danger")
+                return redirect(url_for("forgot_password"))
+
+            user_data = db[session["otp_email"]]
+            user = User.from_dict(user_data)
+
+            # ✅ Use the new `set_password` method
+            user.set_password(new_password)
+
+            # ✅ Save updated user data
+            db[session["otp_email"]] = user.to_dict()
+
+        # ✅ Clear OTP session data
+        session.pop("otp", None)
+        session.pop("otp_email", None)
+        session.pop("otp_expiry", None)
+
+        flash("Password reset successfully! Please log in.", "success")
+        return redirect(url_for("login"))
+
+    return render_template("reset_password.html")
+
+
+
+
+# ✅ Logout Route (Clears Session)
+@app.route("/logout")
 def logout():
     session.clear()
-    return redirect(url_for('home'))
+    flash("You have been logged out.", "info")
+    return redirect(url_for("login"))
+
 
 
 @app.route('/register', methods=['GET', 'POST'])
@@ -1446,9 +1826,24 @@ def admin():
         flash("An unexpected error occurred.", "danger")
     return redirect(url_for('home'))
 
+@app.route('/view_users')
+def view_users():
+    if 'user_id' not in session or not session.get('is_admin'):
+        flash("Unauthorized access!", "danger")
+        return redirect(url_for('login'))
+
+    users_list = []
+    with shelve.open(db_path) as db:
+        for email, user_data in db.items():
+            user = User.from_dict(user_data)
+            users_list.append(user)
+
+    return render_template('view_users.html', users=users_list)
+
 
 @app.route('/edit_points/<user_id>', methods=['POST'])
 def edit_points(user_id):
+    """Admin updates user points."""
     if not session.get('is_admin'):
         return redirect(url_for('home'))
 
@@ -1461,13 +1856,18 @@ def edit_points(user_id):
                         new_points = int(request.form['new_points'])
                         user.set_points(new_points)
                         db[email] = user.to_dict()
-                        flash(f"User points updated to {new_points}.")
+
+                        # ✅ Flash message now includes username
+                        flash(f'User "{user.get_username()}" points updated to {new_points}.', "success")
+
                     except ValueError:
                         flash("Invalid point value. Please enter a valid number.", "danger")
                     break
+
     except IOError as e:
         logging.error(f"Database access error in edit_points: {e}")
         flash("Error accessing the database.", "danger")
+
     except Exception as e:
         logging.error(f"Unexpected error in edit_points: {e}")
         flash("An unexpected error occurred.", "danger")
@@ -1476,7 +1876,7 @@ def edit_points(user_id):
 
 
 
-@app.route('/rewards')
+@app.route('/rewards', methods=['GET', 'POST'])
 def rewards():
     if 'user_id' not in session:
         return redirect(url_for('login'))
@@ -1486,44 +1886,130 @@ def rewards():
         user = User.from_dict(user_data)
         points = user.get_points()
 
-    with shelve.open(rewards_db_path) as db:
-        history = db.get(session['user_id'], [])
+    with shelve.open(rewards_db_path, writeback=True) as db:
+        rewards_dict = db.get('rewards', {})
+        rewards = {key: Reward.from_dict(data) for key, data in rewards_dict.items()}
 
-    return render_template('rewards.html', points=points, rewards=REWARDS, history=history)
+        # ✅ Reverse history to show the most recent first
+        history = list(reversed(db.get(session['user_id'], [])))
 
+
+
+        # ✅ Define reward images dictionary
+        reward_images = {
+            'voucher': 'images/voucher.png',
+            'tree_donation': 'images/plant-tree.png',
+            'reusable_bag': 'images/tote-bag.png',
+            'eco_plush': 'images/motorbike-plush.png',
+            'keychain': 'images/helmet-keychain.png'
+        }
+
+    return render_template('rewards.html', points=points, rewards=rewards, history=history, is_admin=session.get('is_admin'), reward_images=reward_images)
+
+
+def initialize_rewards():
+    """Initialize the rewards database if not already set."""
+    with shelve.open(rewards_db_path, 'c') as db:
+        if 'rewards' not in db:  # Only initialize if missing
+            default_rewards = {
+                'voucher': Reward('$1 Voucher', 100),
+                'reusable_bag': Reward('Reusable Bag', 300),
+                'eco_plush': Reward('Eco-friendly Plush', 500),
+                'keychain': Reward('Keychain', 150),
+                'tree_donation': Reward('Tree Donation', 100),
+            }
+            db['rewards'] = {key: reward.to_dict() for key, reward in default_rewards.items()}
 
 @app.route('/redeem/<reward_type>', methods=['POST'])
 def redeem_reward(reward_type):
     if 'user_id' not in session:
         return redirect(url_for('login'))
 
-    if reward_type not in REWARDS:
-        flash('Invalid reward selection.', 'danger')
-        return redirect(url_for('rewards'))
+    with shelve.open(rewards_db_path, writeback=True) as db:
+        rewards_dict = db.get('rewards', {})
+        if reward_type not in rewards_dict:
+            flash('Invalid reward selection.', 'danger')
+            return redirect(url_for('rewards'))
 
-    cost = REWARDS[reward_type]['cost']
+        reward = Reward.from_dict(rewards_dict[reward_type])
+        cost = reward.get_cost()
+
+        # ✅ Check if the reward is in stock
+        if reward.get_stock() <= 0:
+            flash("This reward is out of stock!", "danger")
+            return redirect(url_for('rewards'))
 
     with shelve.open(db_path, writeback=True) as db:
         user_data = db[session['user_id']]
         user = User.from_dict(user_data)
 
-        if not user.redeem_points(cost):
-            flash('Insufficient points.', 'danger')
+        # ✅ Ensure user has enough points
+        if user.get_points() < cost:
+            flash("Insufficient points.", "danger")
             return redirect(url_for('rewards'))
 
-        db[session['user_id']] = user.to_dict()
+        # ✅ Deduct points and decrease stock
+        user.redeem_points(cost)
+        reward.set_stock(reward.get_stock() - 1)  # ✅ Reduce stock by 1
 
+        # ✅ Update database
+        db[session['user_id']] = user.to_dict()
+        with shelve.open(rewards_db_path, writeback=True) as db_rewards:
+            db_rewards['rewards'][reward_type] = reward.to_dict()
+
+    # ✅ Log the reward redemption in history
     with shelve.open(rewards_db_path, writeback=True) as db:
         if session['user_id'] not in db:
             db[session['user_id']] = []
         db[session['user_id']].append({
-            'reward': REWARDS[reward_type]['name'],
-            'date': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'reward': reward.get_name(),
+            'date': time.strftime('%Y-%m-%d %H:%M:%S'),
             'points_used': cost
         })
 
-    flash(f'Successfully redeemed {REWARDS[reward_type]["name"]}!', 'success')
+    flash(f"Successfully redeemed {reward.get_name()}!", "success")
     return redirect(url_for('rewards'))
+
+@app.route('/update_reward_stock', methods=['POST'])
+def update_reward_stock():
+    """Admin updates reward stock."""
+    if 'user_id' not in session or not session.get('is_admin'):
+        flash("Unauthorized access!", "danger")
+        return redirect(url_for('rewards'))
+
+    reward_id = request.form.get("reward_id")
+    new_stock = request.form.get("stock")
+
+    if not reward_id or new_stock is None:
+        flash("Invalid reward update request.", "danger")
+        return redirect(url_for("rewards"))
+
+    try:
+        new_stock = int(new_stock)
+        if new_stock < 0:
+            flash("Stock cannot be negative.", "danger")
+            return redirect(url_for("rewards"))
+
+        with shelve.open(rewards_db_path, writeback=True) as db:
+            rewards_dict = db.get("rewards", {})
+
+            if reward_id not in rewards_dict:
+                flash("Invalid reward selection.", "danger")
+                return redirect(url_for("rewards"))
+
+            reward = Reward.from_dict(rewards_dict[reward_id])
+            reward.set_stock(new_stock)
+            rewards_dict[reward_id] = reward.to_dict()
+            db["rewards"] = rewards_dict
+
+        # ✅ Flash message now includes reward name
+        flash(f'Stock for "{reward.get_name()}" updated to {new_stock}.', "success")
+
+    except ValueError:
+        flash("Invalid stock value. Please enter a valid number.", "danger")
+
+    return redirect(url_for("rewards"))
+
 
 
 @app.route('/rewards/history')
@@ -1577,12 +2063,14 @@ def delete(user_id):
 
     with shelve.open(db_path) as db:
         for email, user_data in list(db.items()):
-            if User.from_dict(user_data).get_user_id() == user_id:
+            user = User.from_dict(user_data)
+            if user.get_user_id() == user_id:
                 del db[email]
-                flash('User deleted successfully.')
+                flash(f'User "{user.get_username()}" deleted successfully.', "danger")
                 break
 
     return redirect(url_for('admin'))
+
 
 @app.route('/add_admin', methods=['POST'])
 def add_admin():
@@ -1595,17 +2083,17 @@ def add_admin():
     confirm_password = request.form['confirm_password']
 
     if password != confirm_password:
-        flash('Passwords do not match.')
+        flash('Passwords do not match.', "danger")
         return redirect(url_for('admin'))
 
     with shelve.open(db_path) as db:
         if email in db:
-            flash('Email already registered.')
+            flash('Email already registered.', "danger")
             return redirect(url_for('admin'))
 
         if any(User.from_dict(user_data).get_username() == username
                for user_data in db.values()):
-            flash('Username already taken.')
+            flash('Username already taken.', "danger")
             return redirect(url_for('admin'))
 
         user = User(
@@ -1616,11 +2104,12 @@ def add_admin():
             is_admin=True
         )
         db[email] = user.to_dict()
-        flash('Admin user created successfully.')
+        flash(f'Admin user "{username}" created successfully.', "success")
         return redirect(url_for('admin'))
 
 
-@app.route('/toggle_admin/<user_id>', methods=['POST'])
+
+@app.route("/toggle_admin/<user_id>", methods=["POST"])
 def toggle_admin(user_id):
     if not session.get('is_admin'):
         return redirect(url_for('home'))
@@ -1631,15 +2120,22 @@ def toggle_admin(user_id):
             if user.get_user_id() == user_id:
                 # Prevent self-demotion
                 if email == session['user_id']:
-                    flash('You cannot change your own admin status.')
+                    flash('You cannot change your own admin status.', "danger")
                     return redirect(url_for('admin'))
 
                 user.set_admin(not user.is_admin())
                 db[email] = user.to_dict()
-                flash(f"User {'promoted to' if user.is_admin() else 'demoted from'} admin.")
+
+                # ✅ Flash message now includes username
+                if user.is_admin():
+                    flash(f'User "{user.get_username()}" promoted to admin.', "success")
+                else:
+                    flash(f'User "{user.get_username()}" demoted from admin.', "warning")
+
                 break
 
     return redirect(url_for('admin'))
+
 
 #Rais
 @app.route('/createDefect', methods=['GET', 'POST'])
@@ -1650,7 +2146,7 @@ def create_defect():
             with shelve.open('defect.db', 'c') as db:
                 defects_dict = db.get('Defects', {})
                 defect = createDefect(
-                    create_defect_form.bike_id.data,
+                    create_defect_form.bike_id.data.upper(),
                     create_defect_form.defect_type.data,
                     create_defect_form.date_found.data,
                     create_defect_form.bike_location.data,
@@ -1658,13 +2154,40 @@ def create_defect():
                     create_defect_form.description.data
                 )
                 defects_dict[defect.get_report_id()] = defect
-                db['Defects'] = defects_dict
-            flash("Defect reported successfully!", "success")
+                db['Defects'] = defects_dict  # Save defects
+
+            bike_id = create_defect_form.bike_id.data.upper()
+
+            # 🔽 Reduce stock when defect is reported
+            with shelve.open('bike.db', 'c') as db:
+                bikes = db.get('Bikes', {})
+                for key, bike in bikes.items():
+                    if bike['bike_name'].upper() == bike_id:
+                        if bike['stock_quantity'] > 0:  # Ensure stock doesn't go negative
+                            bike['stock_quantity'] -= 1
+                        else:
+                            flash(f"Stock for {bike_id} is already at zero!", "warning")
+                        break
+                db['Bikes'] = bikes  # Save updated stock
+
+            with shelve.open('bike_ids.db', 'c') as db:
+                bike_ids = db.get('bike_ids', {})
+                if bike_id in bike_ids:
+                    if bike_ids[bike_id]['stock'] > 0:  # Prevent negative stock
+                        bike_ids[bike_id]['stock'] -= 1
+                    else:
+                        flash(f"Stock for {bike_id} in bike_ids.db is already at zero!", "warning")
+                    db['bike_ids'] = bike_ids  # Save updated stock
+
+            flash("Defect reported successfully! Stock updated.", "success")
             return redirect(url_for('success'))
         except Exception as e:
             logging.error(f"Error reporting defect: {e}")
             flash("An error occurred while reporting the defect.", "error")
+
     return render_template('createDefect.html', form=create_defect_form)
+
+
 
 def load_env(file_path=".env"):
     try:
@@ -1689,70 +2212,175 @@ def success():
 def update_defect(id):
     update_defect_form = UpdateDefectForm(request.form)
     defects_dict = {}
-    db = shelve.open('defect.db', 'r')
-    try:
-        defects_dict = db['Defects']
+
+    with shelve.open('defect.db', 'c') as db:
+        defects_dict = db.get('Defects', {})
         defect = defects_dict.get(id)
-        db.close()
-    except:
-        print("Error in retrieving Defects from defect.db.")
-        return redirect(url_for('retrieve_defects'))
+
+    if not defect:
+        flash("Defect not found.", "error")
+        return redirect(url_for('retrieve_defect'))
 
     if request.method == 'POST' and update_defect_form.validate():
-        db = shelve.open('defect.db', 'w')
         try:
-            defects_dict = db['Defects']
-            defect = defects_dict.get(id)
-            if defect:
-                defect.set_status(update_defect_form.status.data)
-                db['Defects'] = defects_dict
-            db.close()
-            return redirect(url_for('retrieve_defects'))
-        except:
-            print("Error updating defect status.")
-            db.close()
-            return redirect(url_for('retrieve_defects'))
+            new_status = update_defect_form.status.data
+            old_status = defect.get_status()
 
-    if defect:
-        update_defect_form.status.data = defect.get_status()
-        return render_template('updateDefect.html', form=update_defect_form, defect=defect)
+            defect.set_status(new_status)
+            defects_dict[id] = defect
+            with shelve.open('defect.db', 'c') as db:
+                db['Defects'] = defects_dict  # Save updated defects
 
-    return redirect(url_for('retrieve_defects'))
+            bike_id = defect.get_bike_id().upper()
+
+            if old_status != "Repaired" and new_status == "Repaired":
+                # Increase stock when defect is marked as repaired
+                with shelve.open('bike.db', 'c') as db:
+                    bikes = db.get('Bikes', {})
+                    if bike_id in bikes:
+                        bikes[bike_id]['stock_quantity'] += 1
+                        db['Bikes'] = bikes  # Save updated data
+
+                with shelve.open('bike_ids.db', 'c') as db:
+                    bike_ids = db.get('bike_ids', {})
+                    if bike_id in bike_ids:
+                        bike_ids[bike_id]['stock'] += 1
+                        db['bike_ids'] = bike_ids  # Save updated data
+
+            flash("Defect status updated successfully! Stock adjusted.", "success")
+            return redirect(url_for('retrieve_defect'))
+
+        except Exception as e:
+            logging.error(f"Error updating defect status: {e}")
+            flash("An error occurred while updating the defect status.", "error")
+
+    update_defect_form.status.data = defect.get_status()
+    return render_template('updateDefect.html', form=update_defect_form, defect=defect)
 
 
-@app.route('/retrieveDefect')
-def retrieve_defects():
+@app.route('/retrieveDefect', methods=['GET', 'POST'])
+def retrieve_defect():
     defects_dict = {}
-    try:
-        db = shelve.open('defect.db', 'r')
-        defects_dict = db['Defects']
-        db.close()
-    except:
-        print("Error in retrieving Defects from defect.db.")
 
-    defects_list = []
-    for key in defects_dict:
-        defect = defects_dict.get(key)
-        defects_list.append(defect)
+    with shelve.open('defect.db', 'c') as db:
+        defects_dict = db.get('Defects', {})
 
-    return render_template('retrieveDefect.html', defects_list=defects_list, count=len(defects_list))
+    defects_list = list(defects_dict.values())
+
+    # Get search inputs
+    search_bike_id = request.form.get('search_bike_id', '').strip().lower()
+    search_status = request.form.get('search_status', '').strip().lower()
+    search_report_id = request.form.get('search_report_id', '').strip().lower()
+    search_defect_type = request.form.get('search_defect_type', '').strip().lower()
+    search_severity = request.form.get('search_severity', '').strip().lower()
+
+    # Filtering logic
+    filtered_defects = []
+    for defect in defects_list:
+        if (
+            (not search_bike_id or search_bike_id in defect.get_bike_id().lower()) and
+            (not search_status or search_status in defect.get_status().lower()) and
+            (not search_report_id or search_report_id in str(defect.get_report_id()).lower()) and
+            (not search_defect_type or search_defect_type in defect.get_defect_type().lower()) and
+            (not search_severity or search_severity in defect.get_severity().lower())
+        ):
+            filtered_defects.append(defect)
+
+    # Handle clearing filters
+    if request.method == 'POST' and "clear_filters" in request.form:
+        return redirect(url_for('retrieve_defect'))
+
+    return render_template(
+        'retrieveDefect.html',
+        defects_list=filtered_defects if any([search_bike_id, search_status, search_report_id, search_defect_type, search_severity]) else defects_list
+    )
 
 
 @app.route('/deleteDefect/<int:id>', methods=['POST'])
 def delete_defect(id):
-    defects_dict = {}
-    db = shelve.open('defect.db', 'w')
-    try:
-        defects_dict = db['Defects']
-        if id in defects_dict:  # Check if report ID exists
-            defects_dict.pop(id)
-            db['Defects'] = defects_dict
-        db.close()
-    except Exception as e:
-        print(f"Error in retrieving Defects from defect.db: {e}")
-        db.close()
+    with shelve.open('defect.db', 'c') as db:
+        defects_dict = db.get('Defects', {})
+        defect = defects_dict.get(id)
 
-    return redirect(url_for('retrieve_defects'))
+        if defect:
+            if defect.get_status() in ["Repaired", "Closed"]:
+                del defects_dict[id]
+                db['Defects'] = defects_dict
+                flash("Defect report deleted successfully.", "success")
+            else:
+                flash("Not allowed to delete while status is Pending.", "error")
+        else:
+            flash("Defect report not found.", "error")
+
+    return redirect(url_for('retrieve_defect'))
+
+@app.route('/archiveDefect/<int:defect_id>', methods=['POST'])
+def archive_defect(defect_id):
+    """Move defect from 'defect.db' to 'archive.db'"""
+    with shelve.open('defect.db', 'c') as db:
+        defects = db.get('Defects', {})
+        defect = defects.pop(defect_id, None)  # Remove defect from active defects
+        db['Defects'] = defects  # Save updated defects list
+
+    if defect:
+        with shelve.open('archive.db', 'c') as archive_db:
+            archived_defects = archive_db.get('ArchivedDefects', {})
+            archived_defects[defect_id] = defect  # Store defect in archive
+            archive_db['ArchivedDefects'] = archived_defects  # Save archived defects
+
+    flash("Defect archived successfully!", "success")
+    return redirect(url_for('retrieve_defect'))
+
+@app.route('/retrieveArchivedDefects', methods=['GET', 'POST'])
+def retrieve_archived_defects():
+    with shelve.open('archive.db', 'c') as archive_db:
+        archived_defects_dict = archive_db.get('ArchivedDefects', {})
+
+    archived_defects_list = list(archived_defects_dict.values())
+
+    # Get search inputs
+    search_bike_id = request.form.get('search_bike_id', '').strip().lower()
+    search_status = request.form.get('search_status', '').strip().lower()
+    search_report_id = request.form.get('search_report_id', '').strip().lower()
+    search_defect_type = request.form.get('search_defect_type', '').strip().lower()
+    search_severity = request.form.get('search_severity', '').strip().lower()
+
+    # Filtering logic
+    filtered_archived_defects = []
+    for defect in archived_defects_list:
+        if (
+            (not search_bike_id or search_bike_id in defect.get_bike_id().lower()) and
+            (not search_status or search_status in defect.get_status().lower()) and
+            (not search_report_id or search_report_id in str(defect.get_report_id()).lower()) and
+            (not search_defect_type or search_defect_type in defect.get_defect_type().lower()) and
+            (not search_severity or search_severity in defect.get_severity().lower())
+        ):
+            filtered_archived_defects.append(defect)
+
+    # Handle clearing filters
+    if request.method == 'POST' and "clear_filters" in request.form:
+        return redirect(url_for('retrieve_archived_defects'))
+
+    return render_template(
+        'retrieveArchiveDefect.html',
+        defects=filtered_archived_defects if any([search_bike_id, search_status, search_report_id, search_defect_type, search_severity]) else archived_defects_list
+    )
+
+
+
+
+
+@app.route('/deleteArchivedDefect/<int:defect_id>', methods=['POST'])
+def delete_archived_defect(defect_id):
+    """Permanently delete a defect from 'archive.db'"""
+    with shelve.open('archive.db', 'c') as archive_db:
+        archived_defects = archive_db.get('ArchivedDefects', {})
+        if defect_id in archived_defects:
+            del archived_defects[defect_id]  # Delete defect permanently
+            archive_db['ArchivedDefects'] = archived_defects  # Save changes
+
+    flash("Defect permanently deleted.", "success")
+    return redirect(url_for('retrieve_archived_defects'))
 
 
 @app.route('/searchUser', methods=['POST'])
@@ -1991,5 +2619,6 @@ def page_not_found(e):
 
 
 if __name__ == '__main__':
+    initialize_rewards()
     initialize_bike_products()
     app.run(debug=True)

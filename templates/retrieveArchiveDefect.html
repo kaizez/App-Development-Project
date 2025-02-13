@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+
+{% block title %}Archived Defects{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <h1 class="display-4 mb-4">Archived Defects</h1>
+
+  <!-- Navigation Button -->
+  <div class="mb-4">
+    <a href="{{ url_for('retrieve_defect') }}" class="btn btn-secondary">Back to Active Defects</a>
+  </div>
+
+  <!-- Search Form (Aligned Side by Side) -->
+  <form method="POST" class="row g-3 align-items-center">
+      <div class="col-md-2">
+          <input type="text" name="search_bike_id" class="form-control" placeholder="Bike ID"
+                 value="{{ request.form.get('search_bike_id', '') }}">
+      </div>
+      <div class="col-md-2">
+          <input type="text" name="search_status" class="form-control" placeholder="Status"
+                 value="{{ request.form.get('search_status', '') }}">
+      </div>
+      <div class="col-md-2">
+          <input type="text" name="search_report_id" class="form-control" placeholder="Report ID"
+                 value="{{ request.form.get('search_report_id', '') }}">
+      </div>
+      <div class="col-md-2">
+          <input type="text" name="search_defect_type" class="form-control" placeholder="Defect Type"
+                 value="{{ request.form.get('search_defect_type', '') }}">
+      </div>
+      <div class="col-md-2">
+          <input type="text" name="search_severity" class="form-control" placeholder="Severity"
+                 value="{{ request.form.get('search_severity', '') }}">
+      </div>
+      <div class="col-md-2 d-flex">
+          <button type="submit" class="btn btn-primary me-2">Search</button>
+          <button type="submit" name="clear_filters" class="btn btn-secondary">Clear</button>
+      </div>
+  </form>
+
+  <!-- Flash Messages -->
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, message in messages %}
+        <div class="alert alert-{{ category }}" role="alert">{{ message }}</div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  <div class="table-responsive mt-3">
+    <table class="table table-hover">
+      <thead class="table-light">
+        <tr>
+          <th class="fw-bold">Report ID</th>
+          <th class="fw-bold">Bike ID</th>
+          <th class="fw-bold">Defect Type</th>
+          <th class="fw-bold">Date Found</th>
+          <th class="fw-bold">Bike Location</th>
+          <th class="fw-bold">Severity</th>
+          <th class="fw-bold">Description</th>
+          <th class="fw-bold">Status</th>
+          <th class="fw-bold">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% if defects %}
+          {% for defect in defects %}
+          <tr>
+            <td>{{ defect.get_report_id() }}</td>
+            <td>{{ defect.get_bike_id() }}</td>
+            <td>{{ defect.get_defect_type() }}</td>
+            <td>{{ defect.get_date_found() }}</td>
+            <td>{{ defect.get_bike_location() }}</td>
+            <td>{{ defect.get_severity() }}</td>
+            <td>{{ defect.get_description() }}</td>
+            <td>
+              <a href="#" class="status-link status-{{ defect.get_status().lower() }}">
+                {{ defect.get_status() }}
+              </a>
+            </td>
+            <td>
+              <!-- Delete Button -->
+              <form action="{{ url_for('delete_archived_defect', defect_id=defect.get_report_id()) }}" method="POST">
+                <button type="submit" class="btn btn-danger btn-sm rounded-pill">
+                  Delete
+                </button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        {% else %}
+          <tr>
+            <td colspan="9" class="text-center text-muted">No archived defects found.</td>
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<style>
+  .table {
+    background-color: #ffffff;
+    border-radius: 1rem;
+    overflow: hidden;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.05);
+  }
+
+  .status-link {
+    text-decoration: none;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    padding: 4px 8px;
+    border-radius: 4px;
+    position: relative;
+    z-index: 1;
+  }
+
+  .status-pending {
+    color: #FFC107;
+  }
+
+  .status-repaired {
+    color: #2ecc71;
+  }
+
+  .status-closed {
+    color: #DC3545;
+  }
+
+  .status-link:hover {
+    background-color: rgba(0, 0, 0, 0.1);
+  }
+
+  .status-pending:hover {
+    color: #FFC107;
+  }
+
+  .status-repaired:hover {
+    color: #2ecc71;
+  }
+
+  .status-closed:hover {
+    color: #DC3545;
+  }
+</style>
+
+{% endblock %}

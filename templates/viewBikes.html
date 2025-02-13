@@ -32,13 +32,21 @@
     <p>Engine: {{ bike.get('engine_output', 'N/A') }} W</p>
     <p>Transmission: {{ bike.get('transmission_type', 'N/A') }}</p>
 
-    <!-- Add to Cart Form -->
-    <form action="{{ url_for('add_to_cart', bike_id=bike_id) }}" method="POST">
-        <button type="submit" class="btn btn-success">Add to Cart</button>
-    </form>
-
     <!-- Stock Quantity Below Button -->
-    <p class="quantity-info"><strong>Stock Quantity:</strong> {{ bike.get('stock_quantity', 'N/A') }}</p>
+    {% set stock_quantity = bike.get('stock_quantity', 0) %}
+    <p class="quantity-info">
+      <strong>Stock Quantity:</strong>
+      <span class="{% if stock_quantity == 0 %}text-danger{% elif stock_quantity <= 2 %}text-warning{% else %}text-success{% endif %}">
+        {{ stock_quantity }}
+      </span>
+    </p>
+
+    <!-- Add to Cart Form (Disabled if Out of Stock) -->
+    <form action="{{ url_for('add_to_cart', bike_id=bike_id) }}" method="POST">
+        <button type="submit" class="btn btn-success" {% if stock_quantity == 0 %}disabled{% endif %}>
+          {% if stock_quantity == 0 %}Out of Stock{% else %}Add to Cart{% endif %}
+        </button>
+    </form>
   </div>
   {% endfor %}
 </div>

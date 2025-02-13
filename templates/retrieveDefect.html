@@ -1,19 +1,54 @@
 {% extends "base.html" %}
+
 {% block title %}Retrieve Issues{% endblock %}
 
 {% block content %}
 <div class="container py-4">
   <h1 class="display-4 mb-4">Retrieve Issues</h1>
+
+  <!-- Navigation Button -->
   <div class="mb-4">
-    {% if count == 0 %}
-    <p class="lead">There are no issues reported.</p>
-    {% elif count == 1 %}
-    <p class="lead">There is 1 issue reported.</p>
-    {% else %}
-    <p class="lead">There are {{ count }} issues reported.</p>
-    {% endif %}
+    <a href="{{ url_for('retrieve_archived_defects') }}" class="btn btn-secondary">View Archived Defects</a>
   </div>
-  <div class="table-responsive">
+
+  <!-- Search Form (Aligned Side by Side) -->
+  <form method="POST" class="row g-3 align-items-center">
+      <div class="col-md-2">
+          <input type="text" name="search_bike_id" class="form-control" placeholder="Bike ID"
+                 value="{{ request.form.get('search_bike_id', '') }}">
+      </div>
+      <div class="col-md-2">
+          <input type="text" name="search_status" class="form-control" placeholder="Status"
+                 value="{{ request.form.get('search_status', '') }}">
+      </div>
+      <div class="col-md-2">
+          <input type="text" name="search_report_id" class="form-control" placeholder="Report ID"
+                 value="{{ request.form.get('search_report_id', '') }}">
+      </div>
+      <div class="col-md-2">
+          <input type="text" name="search_defect_type" class="form-control" placeholder="Defect Type"
+                 value="{{ request.form.get('search_defect_type', '') }}">
+      </div>
+      <div class="col-md-2">
+          <input type="text" name="search_severity" class="form-control" placeholder="Severity"
+                 value="{{ request.form.get('search_severity', '') }}">
+      </div>
+      <div class="col-md-2 d-flex">
+          <button type="submit" class="btn btn-primary me-2">Search</button>
+          <button type="submit" name="clear_filters" class="btn btn-secondary">Clear</button>
+      </div>
+  </form>
+
+  <!-- Flash Messages -->
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, message in messages %}
+        <div class="alert alert-{{ category }}" role="alert">{{ message }}</div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  <div class="table-responsive mt-3">
     <table class="table table-hover">
       <thead class="table-light">
         <tr>
@@ -25,11 +60,12 @@
           <th class="fw-bold">Severity</th>
           <th class="fw-bold">Description</th>
           <th class="fw-bold">Status</th>
-          <th class="fw-bold">Actions</th>
-      </tr>
+          <th class="fw-bold">Action</th>
+        </tr>
       </thead>
       <tbody>
-        {% for defect in defects_list %}
+        {% if defects_list %}
+          {% for defect in defects_list %}
           <tr>
             <td>{{ defect.get_report_id() }}</td>
             <td>{{ defect.get_bike_id() }}</td>
@@ -45,34 +81,21 @@
               </a>
             </td>
             <td>
-              <form action="{{ url_for('delete_defect', id=defect.get_report_id()) }}" method="POST">
-                <button type="button" class="btn btn-danger btn-sm rounded-pill" data-bs-toggle="modal" data-bs-target="#myModal_{{defect.get_report_id()}}">
-                    Delete
+              <!-- Archive Button -->
+              <form action="{{ url_for('archive_defect', defect_id=defect.get_report_id()) }}" method="POST">
+                <button type="submit" class="btn btn-warning btn-sm rounded-pill"
+                  {% if defect.get_status() != 'Repaired' and defect.get_status() != 'Closed' %}disabled{% endif %}>
+                  Archive
                 </button>
-
-                <div class="modal" id="myModal_{{defect.get_report_id()}}">
-                    <div class="modal-dialog">
-                        <div class="modal-content">
-                            <div class="modal-header">
-                                <h4 class="modal-title fw-bold">Delete Confirmation</h4>
-                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                            </div>
-
-                            <div class="modal-body">
-                                Are you sure you want to delete the issue with Report ID: {{ defect.get_report_id() }}?
-                            </div>
-
-                            <div class="modal-footer">
-                                <input type="submit" value="Delete" class="btn btn-danger rounded-pill">
-                                <button type="button" class="btn btn-secondary rounded-pill" data-bs-dismiss="modal">Cancel</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
               </form>
             </td>
           </tr>
-        {% endfor %}
+          {% endfor %}
+        {% else %}
+          <tr>
+            <td colspan="9" class="text-center text-muted">No active defects found.</td>
+          </tr>
+        {% endif %}
       </tbody>
     </table>
   </div>
@@ -124,4 +147,5 @@
     color: #DC3545;
   }
 </style>
+
 {% endblock %}

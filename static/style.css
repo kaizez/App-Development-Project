@@ -323,3 +323,9 @@ padding-right: 2em;
 .is-invalid {
     border: 2px solid red !important;
 }
+
+#view_users {
+text-align: center;
+margin: auto;
+}
+
