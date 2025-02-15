@@ -747,6 +747,21 @@ def payment():
                     flash("Error saving order", "error")
                     return render_template('payment.html', form=form, google_maps_api_key=GOOGLE_MAPS_API_KEY)
                 
+                # Calculate points based on the total rental cost
+                points_earned = int(rental_info['total'] * 10)
+
+                # Update user points in the database
+                try:
+                    with shelve.open('users_db', 'c') as db:
+                        if form.email.data in db:  # Check if the user exists
+                            user_data = db[form.email.data]  # Retrieve user data
+                            user = User.from_dict(user_data)  # Convert to User object
+                            user.earn_points(points_earned)  # Add points
+                            db[form.email.data] = user.to_dict()  # Save updated user data
+                except Exception as e:
+                    logging.error(f"Error updating user points: {e}")
+                    flash("Error updating reward points", "error")
+                
                 # Clear session data
                 session.pop('rental_info', None)
                 
@@ -773,16 +788,22 @@ def payment():
     return render_template('payment.html', form=form, google_maps_api_key=GOOGLE_MAPS_API_KEY)
 @app.route('/orders')
 def view_orders():
-    """View all orders"""
+    """View orders for the logged-in user"""
     try:
+        # Get the logged-in user's email from the session
+        user_id = session.get('user_id')
+        if not user_id:
+            flash("Please log in to view your orders", "error")
+            return redirect(url_for('login'))  # Redirect to login if not logged in
+
         with shelve.open('orders.db', 'r') as db:
             orders = db.get('orders', {})
-            logging.debug(f"Retrieved orders: {orders}")
-            if orders:
-                # Verify the first order has the required methods for debugging
-                first_order = next(iter(orders.values()))
-                logging.debug(f"First order attributes: {dir(first_order)}")
-            return render_template('orders.html', orders=orders.values()) #renders order page with all orders
+            # Filter orders to only include those belonging to the logged-in user
+            user_orders = [order for order in orders.values() if order.customer_info.get('email') == user_id]
+            
+            logging.debug(f"Retrieved orders for user {user_id}: {user_orders}")
+            return render_template('orders.html', orders=user_orders)  # Render only the user's orders
+
     except Exception as e:
         logging.error(f"Error in view_orders: {str(e)}")
         flash("Error viewing orders", "error")
@@ -790,17 +811,30 @@ def view_orders():
                         
 @app.route('/order/<order_id>')
 def view_order(order_id):
-    """View a specific order"""
+    """View a specific order, ensuring it belongs to the logged-in user"""
     try:
+        # Get the logged-in user's email from the session
+        user_id = session.get('user_id')
+        if not user_id:
+            flash("Please log in to view your orders", "error")
+            return redirect(url_for('login'))  # Redirect to login if not logged in
+
         with shelve.open('orders.db', 'r') as db:
-            orders = db.get('orders', {}) # Get all orders
-            order = orders.get(order_id) # Find specific order
-            if order:
+            orders = db.get('orders', {})
+            order = orders.get(order_id)
+            
+            # Check if the order exists and belongs to the logged-in user
+            if order and order.customer_info.get('email') == user_id:
                 return render_template('order_details.html', order=order, google_maps_api_key=GOOGLE_MAPS_API_KEY)
-            flash("Order not found", "error")
+            elif order:
+                flash("You do not have permission to view this order", "error")
+            else:
+                flash("Order not found", "error")
+                
     except Exception as e:
         logging.error(f"Error in view_order: {str(e)}", exc_info=True)
         flash("Error retrieving order", "error")
+    
     return redirect(url_for('view_orders'))
 
 @app.route('/order_confirmation/<order_id>') ## just display order dates, duration and ID
@@ -1097,11 +1131,11 @@ def unlock_bike():
     if form.validate_on_submit():
         try:
             bike_id = form.bike_id.data.upper()
-            user_email = session.get('user_email')
+            user_email = session.get('user_id')  # Use 'user_id' from session (set during login)
 
             if not user_email:
-                flash('Please create an order first', 'error')
-                return render_template('unlock.html', form=form)
+                flash('Please log in to unlock a bike', 'error')
+                return redirect(url_for('login'))  # Redirect to login if not logged in
 
             # Get bike ID data
             with shelve.open('bike_ids.db', 'c') as db:
@@ -1113,65 +1147,40 @@ def unlock_bike():
                 bike_info = bike_ids[bike_id]
                 bike_name = bike_info['name']
 
-            # Get product data and check stock
-            with shelve.open('bike.db', 'c') as db:
-                bikes = db.get('Bikes', {})
-                product = None
-                for bike in bikes.values():
-                    if bike['bike_name'] == bike_name:
-                        product = bike
-                        break
-
-                if not product:
-                    flash('Product not found', 'error')
-                    return render_template('unlock.html', form=form)
-
-                if product['stock_quantity'] <= 0:
-                    flash('No bikes available for this model', 'error')
-                    return render_template('unlock.html', form=form)
-
             # Verify rental status
             with shelve.open('orders.db', 'r') as db:
                 orders = db.get('orders', {})
                 has_valid_rental = False
                 for order in orders.values():
-                    if (order.get_customer_info()['email'] == user_email and
-                        any(item['bike']['bike_name'] == bike_name for item in order.get_items().values())):
-                        has_valid_rental = True
-                        break
+                    if order.get_customer_info().get('email') == user_email:  # Check if the order belongs to the user
+                        for item in order.get_items().values():
+                            if item.get('bike', {}).get('bike_name') == bike_name:  # Check if the bike is in the order
+                                has_valid_rental = True
+                                break
+                        if has_valid_rental:
+                            break
 
                 if not has_valid_rental:
                     flash('No active rental found for this bike', 'error')
                     return render_template('unlock.html', form=form)
 
-            # Process unlock
+            # Check if the bike is already unlocked
             if bike_info.get('status') == 'unlocked':
-                flash('Bike is already unlocked', 'error')
+                if bike_info.get('current_user') == user_email:
+                    flash('You have already unlocked this bike', 'info')
+                else:
+                    flash('This bike is already unlocked by another user', 'error')
                 return render_template('unlock.html', form=form)
-
-            # Update bike attributes
-            update_bike_attributes_in_both_dbs(bike_name, -1, 1)  # Decrease stock, increase rental
 
             # Update bike status
             with shelve.open('bike_ids.db', 'c') as db:
                 bike_ids = db.get('bike_ids', {})
                 bike_ids[bike_id]['status'] = 'unlocked'
-                bike_ids[bike_id]['current_user'] = user_email
+                bike_ids[bike_id]['current_user'] = user_email  # Set the current user
                 db['bike_ids'] = bike_ids
 
-            flash('Bike unlocked successfully!', 'success')
-            return redirect(url_for('lock_success'))
-
-
             # Update product stock and rental count
-            with shelve.open('bike.db', 'c') as db:
-                bikes = db.get('Bikes', {})
-                for bike_id, bike in bikes.items():
-                    if bike['bike_name'] == bike_name:
-                        bike['stock_quantity'] -= 1
-                        bike['rental'] = bike.get('rental', 0) + 1  # Ensure 'rental' exists and increment it
-                        break
-                db['Bikes'] = bikes
+            update_bike_attributes_in_both_dbs(bike_name, -1, 1)  # Decrease stock, increase rental
 
             flash('Bike unlocked successfully!', 'success')
             return redirect(url_for('lock_success'))
@@ -1182,14 +1191,17 @@ def unlock_bike():
 
     return render_template('unlock.html', form=form)
 
-
 @app.route('/lock', methods=['GET', 'POST'])
 def lock_bike():
     form = LockUnlockForm()
     if form.validate_on_submit():
         try:
             bike_id = form.bike_id.data.upper()
-            user_email = session.get('user_email')
+            user_email = session.get('user_id')  # Use 'user_id' from session (set during login)
+
+            if not user_email:
+                flash('Please log in to lock a bike', 'error')
+                return redirect(url_for('login'))  # Redirect to login if not logged in
 
             # Get bike ID data
             with shelve.open('bike_ids.db', 'c') as db:
@@ -1201,46 +1213,37 @@ def lock_bike():
                 bike_info = bike_ids[bike_id]
                 bike_name = bike_info['name']
 
-            # Get product data
-            with shelve.open('bike.db', 'c') as db:
-                bikes = db.get('Bikes', {})
-                product = None
-                for bike in bikes.values():
-                    if bike['bike_name'] == bike_name:
-                        product = bike
-                        break
+            # Verify that the current user is the one who unlocked the bike
+            if bike_info.get('current_user') != user_email:
+                flash('You are not the current user of this bike', 'error')
+                return render_template('lock.html', form=form)
 
-                if not product:
-                    flash('Product not found', 'error')
+            # Verify rental status
+            with shelve.open('orders.db', 'r') as db:
+                orders = db.get('orders', {})
+                has_valid_rental = False
+                for order in orders.values():
+                    if order.get_customer_info().get('email') == user_email:  # Check if the order belongs to the user
+                        for item in order.get_items().values():
+                            if item.get('bike', {}).get('bike_name') == bike_name:  # Check if the bike is in the order
+                                has_valid_rental = True
+                                break
+                        if has_valid_rental:
+                            break
+
+                if not has_valid_rental:
+                    flash('No active rental found for this bike', 'error')
                     return render_template('lock.html', form=form)
 
-                # Verify current user
-                if bike_info.get('current_user') != user_email:
-                    flash('You are not the current user of this bike', 'error')
-                    return render_template('lock.html', form=form)
+            # Update bike status
+            with shelve.open('bike_ids.db', 'c') as db:
+                bike_ids = db.get('bike_ids', {})
+                bike_ids[bike_id]['status'] = 'locked'
+                bike_ids[bike_id]['current_user'] = None  # Reset the current user
+                db['bike_ids'] = bike_ids
 
-                # Update bike attributes
-                update_bike_attributes_in_both_dbs(bike_name, 1, -1)  # Increase stock, decrease rental
-
-                # Update bike status
-                with shelve.open('bike_ids.db', 'c') as db:
-                    bike_ids = db.get('bike_ids', {})
-                    bike_ids[bike_id]['status'] = 'locked'
-                    bike_ids[bike_id]['current_user'] = None
-                    db['bike_ids'] = bike_ids
-
-                flash('Bike locked successfully!', 'success')
-                return redirect(url_for('lock_success'))
-
-            # Update product stock
-            with shelve.open('bike.db', 'c') as db:
-                bikes = db.get('Bikes', {})
-                for bike_id, bike in bikes.items():
-                    if bike['bike_name'] == bike_name:
-                        bike['stock_quantity'] += 1
-                        bike['rental'] = max(bike.get('rental', 0) - 1, 0)  # Ensure rental count does not go below 0
-                        break
-                db['Bikes'] = bikes
+            # Update product stock and rental count
+            update_bike_attributes_in_both_dbs(bike_name, 1, -1)  # Increase stock, decrease rental
 
             flash('Bike locked successfully!', 'success')
             return redirect(url_for('lock_success'))
@@ -1283,7 +1286,6 @@ def lock_success():
 
 #bryce
 #User-management
-
 # Configure logging
 logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -1323,11 +1325,9 @@ def google_login():
 # ✅ Google Login Callback Route
 @app.route("/google/callback")
 def google_callback():
+    """Handles Google login and ensures users are registered properly."""
     try:
-        # ✅ Ensure a new OAuth flow instance is created
         flow = get_google_login_flow()
-
-        # ✅ Fetch token correctly
         flow.fetch_token(authorization_response=request.url)
 
         # ✅ Retrieve token credentials
@@ -1342,29 +1342,29 @@ def google_callback():
             clock_skew_in_seconds=10  # ✅ Allow up to 10 seconds time difference
         )
 
-        # ✅ Extract user information from Google token
+        # ✅ Extract user info from Google token
         google_email = id_info["email"]
-        google_name = id_info["name"]
+        google_name = id_info.get("name")
         google_picture = id_info.get("picture", "default.jpg")
 
-        # ✅ Store user information in session
-        session["user_id"] = google_email
-        session["username"] = google_name
-        session["profile_picture"] = google_picture
-        session["is_admin"] = False  # Default role
-
-        # ✅ Store user in database if they don’t exist
         with shelve.open("users_db", writeback=True) as db:
             if google_email not in db:
-                db[google_email] = {
-                    "email": google_email,
-                    "username": google_name,
-                    "profile_picture": google_picture,
-                    "is_admin": False
-                }
+                # ✅ New user detected → Prompt for username
+                session["google_email"] = google_email
+                session["google_picture"] = google_picture
+                return redirect(url_for("set_google_username"))  # ✅ Redirect user to set a username
 
-        flash("Successfully logged in with Google!", "success")
-        return redirect(url_for("user_dashboard"))
+            user_data = db[google_email]
+            user = User.from_dict(user_data)
+
+            # ✅ Store user info in Flask session
+            session["user_id"] = google_email
+            session["username"] = user.get_username()
+            session["profile_picture"] = user.get_profile_picture()
+            session["is_admin"] = user.is_admin()
+
+            flash(f"Welcome back, {user.get_username()}!", "success")
+            return redirect(url_for("user_dashboard"))  # ✅ Redirects correctly
 
     except google.auth.exceptions.InvalidValue as e:
         flash(f"Google login failed: {e}", "danger")
@@ -1374,6 +1374,54 @@ def google_callback():
         flash(f"An unexpected error occurred: {e}", "danger")
         return redirect(url_for("login"))
 
+
+@app.route("/set_google_username", methods=["GET", "POST"])
+def set_google_username():
+    """Allows new Google users to set a username before completing registration."""
+    if "google_email" not in session:
+        flash("Session expired. Please log in again.", "danger")
+        return redirect(url_for("login"))
+
+    if request.method == "POST":
+        username = request.form.get("username")
+
+        # ✅ Ensure username is provided
+        if not username or username.strip() == "":
+            flash("Username cannot be empty.", "danger")
+            return redirect(url_for("set_google_username"))
+
+        # ✅ Check if username already exists in the database
+        with shelve.open("users_db", writeback=True) as db:
+            for user_data in db.values():
+                existing_user = User.from_dict(user_data)
+                if existing_user.get_username().lower() == username.lower():
+                    flash("Username is already taken. Please choose another.", "danger")
+                    return redirect(url_for("set_google_username"))
+
+            # ✅ Create a new user with Google email
+            new_user = User(
+                email=session["google_email"],
+                username=username,
+                password=None,  # Google users do not require a password
+                profile_picture=session["google_picture"]
+            )
+
+            db[session["google_email"]] = new_user.to_dict()
+
+            # ✅ Store user info in session
+            session["user_id"] = session["google_email"]
+            session["username"] = username
+            session["profile_picture"] = session["google_picture"]
+            session["is_admin"] = False  # Default role
+
+            # ✅ Cleanup session variables
+            session.pop("google_email", None)
+            session.pop("google_picture", None)
+
+            flash(f"Welcome, {username}! Your account has been created.", "success")
+            return redirect(url_for("user_dashboard"))  # ✅ Redirects correctly
+
+    return render_template("set_google_username.html")
 
 
 # ✅ Google Gmail API Callback Route
@@ -1709,8 +1757,8 @@ def reset_password():
 @app.route("/logout")
 def logout():
     session.clear()
-    flash("You have been logged out.", "info")
-    return redirect(url_for("login"))
+    flash("You have been logged out.", "info")  # ✅ Flash message persists
+    return redirect(url_for("home"))  # ✅ Redirect to home page
 
 
 
@@ -1800,22 +1848,44 @@ def admin():
             try:
                 total_growth = int(((regular_users_count - past_regular_count) / max(past_regular_count, 1)) * 100)
                 active_growth = int(((active_users_count - past_active_count) / max(past_active_count, 1)) * 100)
-                current_month_rides = 680  # Placeholder value
-                last_month_rides = 354  # Placeholder value
-                rides_growth = int(((current_month_rides - last_month_rides) / max(last_month_rides, 1)) * 100)
             except ZeroDivisionError:
                 flash("Insufficient data to calculate growth percentages.", "warning")
-                total_growth = active_growth = rides_growth = 0
+
+            # Count user signups per month (excluding admins)
+            signups_per_month = defaultdict(int)
+
+            # Get the current date and past 4 months dynamically
+            today = datetime.today()
+            months_list = [(today - timedelta(days=i * 30)).strftime("%b") for i in range(3, -1, -1)]  # Last 4 months
+
+            # Open the database and process user signups
+            for email, user_data in db.items():
+                user = User.from_dict(user_data)
+
+                # Exclude admins
+                if user.is_admin():
+                    continue
+
+                # Convert timestamp to datetime
+                signup_date = datetime.fromtimestamp(float(user.get_user_id()))
+                signup_month = signup_date.strftime("%b")
+
+                # Count signups only for the last 4 months
+                if signup_month in months_list:
+                    signups_per_month[signup_month] += 1
+
+            # Ensure all months are present in signup data, even if zero signups
+            signup_data = [signups_per_month.get(month, 0) for month in months_list]
 
             stats = {
                 'totalUsers': regular_users_count,
                 'activeUsers': active_users_count,
-                'monthlyRides': current_month_rides,
                 'activePercentage': int(
                     (active_users_count / regular_users_count * 100) if regular_users_count > 0 else 0),
                 'totalGrowth': total_growth,
                 'activeGrowth': active_growth,
-                'ridesGrowth': rides_growth
+                'signupData': signup_data,  # Ensure non-empty array
+                'months': months_list  # Ensure correct months are displayed
             }
         return render_template('admin.html', users=users, stats=stats)
     except IOError as e:

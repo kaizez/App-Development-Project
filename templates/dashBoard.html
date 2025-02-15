@@ -7,6 +7,21 @@
     <!-- Dashboard Title -->
     <div class="dashboard-header">
         <h1>Dashboard</h1>
+
+        <!-- ✅ Successful Login Alerts: Only shown in the user dashboard -->
+        {% with messages = get_flashed_messages(with_categories=True) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    {% if "welcome" in message.lower() or "successfully logged in" in message.lower() %}
+                        <div class="alert alert-{{ category }} alert-dismissible fade show text-center" role="alert">
+                            {{ message }}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                        </div>
+                    {% endif %}
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
         <hr>
     </div>
 

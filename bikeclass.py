@@ -39,6 +39,10 @@ class Order:
     def customer_name(self):
         """Extract customer name from customer info"""
         return self.customer_info.get('full_name', 'Unknown Customer')
+    
+    def calculate_points(self):
+        """Calculate reward points based on the total amount spent"""
+        return int(self.total * 10)  # Each dollar spent earns 10 points
         
 class BikeProduct:
     count_id = 0

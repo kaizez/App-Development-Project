@@ -81,6 +81,7 @@ class User:
         self.__last_login = time.time()
 
     def earn_points(self, amount):
+        """Earn points based on order spending"""
         self.__points += amount
 
     def redeem_points(self, amount):

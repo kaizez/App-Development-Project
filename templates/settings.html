@@ -6,12 +6,26 @@
 <div class="container mt-5">
     <h2 class="text-center">Account Settings</h2>
 
+    <!-- ✅ Profile Picture Alerts: Only shown in settings -->
+    {% with messages = get_flashed_messages(with_categories=True) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                {% if "profile" in message.lower() %}  <!-- ✅ Show only profile-related messages -->
+                    <div class="alert alert-{{ category }} alert-dismissible fade show text-center" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                {% endif %}
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
     <div class="card shadow p-4">
         <div class="text-center">
             <h5>Current Profile Picture</h5>
-            <img src="{{ url_for('static', filename='profile_pics/' + user.get_profile_picture()) }}" 
-                 class="rounded-circle img-fluid" 
-                 style="width: 150px; height: 150px; object-fit: cover;" 
+            <img src="{{ url_for('static', filename='profile_pics/' + user.get_profile_picture()) }}"
+                 class="rounded-circle img-fluid"
+                 style="width: 150px; height: 150px; object-fit: cover;"
                  alt="Profile Picture">
         </div>
 
@@ -24,5 +38,4 @@
         </form>
     </div>
 </div>
-
 {% endblock %}

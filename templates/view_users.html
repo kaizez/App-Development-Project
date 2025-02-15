@@ -1,26 +1,41 @@
 {% extends "base.html" %}
 
-{% block title %}User List{% endblock %}
+{% block title %}Settings{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-    <h2 class="text-center mb-4">Registered Users</h2>
-    <div class="row">
-        {% for user in users %}
-            <div class="col-md-4 mb-3">
-                <div class="card shadow">
-                    <img src="{{ url_for('static', filename='profile_pics/' + user.get_profile_picture()) }}" 
-                         class="card-img-top img-fluid mx-auto mt-3 rounded-circle" 
-                         style="width: 200px; height: 200px; object-fit: cover;"
-                         alt="{{ user.get_username() }}">
-                    <div class="card-body text-center">
-                        <h5 class="card-title">{{ user.get_username() }}</h5>
-                        <p class="card-text"><strong>Email:</strong> {{ user.get_email() }}</p>
-                        <p class="card-text"><strong>Points:</strong> {{ user.get_points() }}</p>
+<div class="container mt-5">
+    <h2 class="text-center">Account Settings</h2>
+
+    <!-- ✅ Profile Picture Alerts: Only shown in settings -->
+    {% with messages = get_flashed_messages(with_categories=True) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                {% if "profile" in message.lower() %}  <!-- ✅ Show only profile-related messages -->
+                    <div class="alert alert-{{ category }} alert-dismissible fade show text-center" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                     </div>
-                </div>
+                {% endif %}
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <div class="card shadow p-4">
+        <div class="text-center">
+            <h5>Current Profile Picture</h5>
+            <img src="{{ url_for('static', filename='profile_pics/' + user.get_profile_picture()) }}"
+                 class="rounded-circle img-fluid"
+                 style="width: 150px; height: 150px; object-fit: cover;"
+                 alt="Profile Picture">
+        </div>
+
+        <form action="{{ url_for('settings') }}" method="POST" enctype="multipart/form-data">
+            <div class="mb-3">
+                <label for="profile_picture" class="form-label">Upload New Profile Picture (PNG/JPG):</label>
+                <input type="file" class="form-control" id="profile_picture" name="profile_picture" accept=".png, .jpg, .jpeg" required>
             </div>
-        {% endfor %}
+            <button type="submit" class="btn btn-primary w-100">Update Profile Picture</button>
+        </form>
     </div>
 </div>
 {% endblock %}

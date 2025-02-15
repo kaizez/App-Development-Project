@@ -262,70 +262,120 @@ h1.display-4 {
 .track-details strong {
     color: #000;
 }
+
+
 /* Bryce */
-.loginpage {
-
-    margin-right: 5em;
-    float: right;
-
-
-}
 
 .login2 {
-    position: absolute;
-    background-color: #E8ECE4;
-    top: 0;
-    right: 0;
-    width: 40%;
+    background-color: #E8ECE4; /* Match the main background */
+}
+
+.form-control {
+    background-color: #f0f0f0; /* Light gray input fields */
+    border: 1px solid #ccc; /* Soft border */
+    color: #333; /* Dark text for contrast */
+}
+
+.form-control::placeholder {
+    color: #666; /* Adjusted placeholder color */
+}
+
+/* Login Button */
+.login-button {
+    background-color: #2ECC71 !important; /* Green login button */
+    color: white !important;
+    border: none;
+    padding: 10px;
+    border-radius: 5px;
+}
+
+.login-button:hover {
+    background-color: #25a25a !important; /* Darker green on hover */
+}
+
+/* Sign in with Google Button */
+.google-login {
+    border: 1px solid #ccc !important; /* Adding a border */
+    background-color: white !important;
+    color: #333 !important;
+    padding: 10px;
+    border-radius: 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.google-login:hover {
+    background-color: #2ECC71 !important; /* Turns green on hover */
+    color: white !important;
+}
+
+/* Eye Icon Button */
+.toggle-password {
+    background-color: #f0f0f0 !important; /* Matches input field background */
+    border: 1px solid #ccc;
+    color: #333;
+    padding: 5px 10px;
+    border-radius: 5px;
+}
+
+.toggle-password:hover {
+    background-color: #e0e0e0 !important;
+}
+
+
+.forgot, .register {
+    color: #333 !important; /* Darker text for better readability */
+}
+
+.register {
+    font-weight: bold;
+}
+
+/* Login Page Background */
+
+.login-page {
+    background: url("/static/images/riderbackground.jpg") no-repeat center center fixed;
+    background-size: cover;
     height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
 
+/* Registration Page Background */
+.register-page {
+    background: url("/static/images/registerbackground.jpg") no-repeat center center fixed;
+    background-size: cover;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Ensure the registration form is visible */
+.register-card {
+    background: rgba(255, 255, 255, 0.85); /* White background with slight transparency */
+    border-radius: 10px;
+    padding: 20px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
 }
 
 
 
-.loginfield {
-
-    margin-top: 10px;
-    margin-bottom: 10px;
-
-
+/* Ensure login card is visible */
+.login-card {
+    background: rgba(255, 255, 255, 0.85); /* White background with slight transparency */
+    border-radius: 10px;
+    padding: 20px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
 }
 
-.forgot {
-
-    font-size: x-small;
+.back-home {
+    transition: border 0.3s ease;
 }
 
-.loginbutton {
-
-    background-color: #2ECC71;
-    border-radius: 20px;
-    border: 0;
-    padding-left: 0.5em;
-    padding-right: 0.5em;
-
-}
-
-.userdata {
-
-width: 50%;
-display: inline;
-
-
-}
-
-td {
-padding: 1em;
-padding-left: 2em;
-padding-right: 2em;
-}
-
-.is-invalid {
-    border: 2px solid red !important;
-}
-
-#view_users {
-text-align: center;
-margin: auto;
+.back-home:hover {
+    border: 2px solid black;
 }
 
