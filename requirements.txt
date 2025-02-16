@@ -1,6 +1,6 @@
 flask
 flask_wtf
-#email_validators
+email_validator
 requests
 google-auth
 google-auth-oauthlib
