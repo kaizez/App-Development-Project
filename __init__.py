@@ -759,6 +759,10 @@ def payment():
                             user = User.from_dict(user_data)  # Convert to User object
                             user.earn_points(points_earned)  # Add points
                             db[form.email.data] = user.to_dict()  # Save updated user data
+
+                            # ✅ Add Flash Message
+                            flash(f"Congratulations! You have earned {points_earned} reward points!", "success")
+
                 except Exception as e:
                     logging.error(f"Error updating user points: {e}")
                     flash("Error updating reward points", "error")
@@ -787,6 +791,7 @@ def payment():
 
     # GET request - render empty form
     return render_template('payment.html', form=form, google_maps_api_key=GOOGLE_MAPS_API_KEY)
+
 @app.route('/orders')
 def view_orders():
     """View orders for the logged-in user"""
