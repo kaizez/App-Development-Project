@@ -17,7 +17,8 @@ import re
 import gpxpy
 import os
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
+from collections import defaultdict
 from bikeclass import BikeProduct, Order, carparks
 from bikeclass import BikeDefect as createDefect
 from User import User, Reward
