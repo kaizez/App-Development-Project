@@ -42,11 +42,17 @@
     </p>
 
     <!-- Add to Cart Form (Disabled if Out of Stock) -->
+    {% if 'user_id' in session %}
+    <!-- Show "Add to Cart" for Logged-in Users -->
     <form action="{{ url_for('add_to_cart', bike_id=bike_id) }}" method="POST">
         <button type="submit" class="btn btn-success" {% if stock_quantity == 0 %}disabled{% endif %}>
-          {% if stock_quantity == 0 %}Out of Stock{% else %}Add to Cart{% endif %}
+            {% if stock_quantity == 0 %}Out of Stock{% else %}Add to Cart{% endif %}
         </button>
     </form>
+    {% else %}
+    <!-- Redirect to Login for Non-Logged-in Users -->
+    <a href="{{ url_for('login') }}" class="btn btn-primary">Login to Add to Cart</a>
+    {% endif %}
   </div>
   {% endfor %}
 </div>

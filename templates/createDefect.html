@@ -10,6 +10,8 @@
   <div class="row justify-content-center">
     <div class="col-md-8">
       <form method="POST" action="">
+
+        <!-- Bike ID -->
         <div class="form-group mb-4">
           <div class="row align-items-center">
             <div class="col-md-3 text-start">
@@ -17,15 +19,14 @@
             </div>
             <div class="col-md-9">
               {{ form.bike_id(class="form-control form-control-lg text-center", placeholder="Enter Bike ID") }}
-              {% if form.bike_id.errors %}
-                {% for error in form.bike_id.errors %}
-                  <div class="text-danger">{{ error }}</div>
-                {% endfor %}
-              {% endif %}
+              {% for error in form.bike_id.errors %}
+                <div class="text-danger">{{ error }}</div>
+              {% endfor %}
             </div>
           </div>
         </div>
 
+        <!-- Defect Type -->
         <div class="form-group mb-4">
           <div class="row align-items-center">
             <div class="col-md-3 text-start">
@@ -33,15 +34,14 @@
             </div>
             <div class="col-md-9">
               {{ form.defect_type(class="form-control form-control-lg text-center", placeholder="Select") }}
-              {% if form.defect_type.errors %}
-                {% for error in form.defect_type.errors %}
-                  <div class="text-danger">{{ error }}</div>
-                {% endfor %}
-              {% endif %}
+              {% for error in form.defect_type.errors %}
+                <div class="text-danger">{{ error }}</div>
+              {% endfor %}
             </div>
           </div>
         </div>
 
+        <!-- Date Found -->
         <div class="form-group mb-4">
           <div class="row align-items-center">
             <div class="col-md-3 text-start">
@@ -49,38 +49,35 @@
             </div>
             <div class="col-md-9">
               {{ form.date_found(class="form-control form-control-lg text-center", placeholder="dd/mm/yyyy") }}
-              {% if form.date_found.errors %}
-                {% for error in form.date_found.errors %}
-                  <div class="text-danger">{{ error }}</div>
-                {% endfor %}
-              {% endif %}
+              {% for error in form.date_found.errors %}
+                <div class="text-danger">{{ error }}</div>
+              {% endfor %}
             </div>
           </div>
         </div>
 
+        <!-- Bike Location (Google Maps Autocomplete) -->
         <div class="form-group mb-4">
           <div class="row align-items-center">
             <div class="col-md-3 text-start">
               <span class="form-label-lg">{{ form.bike_location.label.text }}:</span>
             </div>
             <div class="col-md-9">
-              <input type="text" name="bike_location" id="search_input"
+              <input type="text" name="bike_location" id="bike_location"
                 class="form-control form-control-lg text-center"
                 placeholder="Enter Bike Location" required>
-              {% if form.bike_location.errors %}
-                {% for error in form.bike_location.errors %}
-                  <div class="text-danger">{{ error }}</div>
-                {% endfor %}
-              {% endif %}
+              {% for error in form.bike_location.errors %}
+                <div class="text-danger">{{ error }}</div>
+              {% endfor %}
             </div>
           </div>
         </div>
 
+        <!-- Hidden Fields for Latitude & Longitude -->
         <input type="hidden" id="latitude" name="latitude">
         <input type="hidden" id="longitude" name="longitude">
 
-
-
+        <!-- Severity -->
         <div class="form-group mb-4">
           <div class="row align-items-center">
             <div class="col-md-3 text-start">
@@ -99,20 +96,19 @@
           </div>
         </div>
 
+        <!-- Description -->
         <div class="form-group mb-4">
           <div class="row align-items-center">
             <div class="col-md-3 text-start">
               <span class="form-label-lg">{{ form.description.label.text }}:</span>
             </div>
             <div class="col-md-9">
-            <textarea name="description" id="description" class="form-control form-control-lg text-center"
+              <textarea name="description" id="description" class="form-control form-control-lg text-center"
                 placeholder="Enter Description of the Defect" rows="4"></textarea>
-            <span id="descriptionError" class="text-danger" style="display: none;">Please elaborate on the defect</span>
-              {% if form.description.errors %}
-                {% for error in form.description.errors %}
-                  <div class="text-danger">{{ error }}</div>
-                {% endfor %}
-              {% endif %}
+              <span id="descriptionError" class="text-danger" style="display: none;">Please elaborate on the defect</span>
+              {% for error in form.description.errors %}
+                <div class="text-danger">{{ error }}</div>
+              {% endfor %}
             </div>
           </div>
         </div>
@@ -123,100 +119,33 @@
       </form>
     </div>
   </div>
-  <div class="bottom-shape"></div>
 </div>
 
-<style>
-  .form-control::placeholder {
-    text-align: center;
-  }
-
-  .form-control {
-    margin: 0 auto;
-    height: auto;
-    background-color: #ffffff;
-    border: 1px solid #dcdcdc;
-  }
-
-  .text-danger {
-    display: block;
-    text-align: center;
-    margin-top: 0.25rem;
-  }
-
-  .form-control-lg {
-    padding: 0.8rem 1rem;
-  }
-
-  .form-label-lg {
-    font-size: 1.2rem;
-    font-weight: bold;
-    color: #333;
-  }
-
-  .btn-success {
-    background-color: #2ecc71;
-    border-color: #2ecc71;
-    border-radius: 50px;
-    transition: all 0.3s ease;
-  }
-
-  .btn-success:hover {
-    background-color: #27ae60;
-    border-color: #27ae60;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-  }
-
-  .form-check-input:checked {
-    background-color: #2ecc71;
-    border-color: #2ecc71;
-  }
-
-  .bottom-shape {
-    position: fixed;
-    bottom: -200px;
-    left: -200px;
-    width: 600px;
-    height: 600px;
-    background-color: #2ecc71;
-    border-radius: 50%;
-    z-index: -1;
-    opacity: 0.8;
-  }
-
-  .container {
-    position: relative;
-    z-index: 1;
-  }
-</style>
-
-<!-- Google Maps API Script  -->
+<!-- Google Maps API -->
 <script async
-    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBM2JF2FhKYKCmwvY3YFZUk2DNZL_drcA4&libraries=places&callback=initAutocomplete">
+    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCvS_mLE8GypSumj0xP2t7eZ1P3QpLJEsU&libraries=places&callback=initAutocomplete">
 </script>
 
-<!-- Autocomplete Script -->
+<!-- Google Places Autocomplete -->
 <script>
 function initAutocomplete() {
-    var searchInput = document.getElementById('search_input');
+    var locationInput = document.getElementById('bike_location');
 
-    if (!searchInput) {
-        console.error("Search input field not found!");
+    if (!locationInput) {
+        console.error("Bike location input field not found!");
         return;
     }
 
-    var autocomplete = new google.maps.places.Autocomplete(searchInput, {
+    var autocomplete = new google.maps.places.Autocomplete(locationInput, {
         types: ['geocode'],
         componentRestrictions: { country: 'SG' }  // Restrict to Singapore
     });
 
-    // Handle the selected place
     autocomplete.addListener('place_changed', function () {
         var place = autocomplete.getPlace();
 
         if (!place.geometry) {
-            console.log("Place not found");
+            console.log("No geometry available for selected place.");
             return;
         }
 
@@ -226,31 +155,30 @@ function initAutocomplete() {
         var longitude = place.geometry.location.lng();
 
         // Fill input field with formatted address
-        searchInput.value = formatted_address;
+        locationInput.value = formatted_address;
 
         // Set hidden fields with lat/lng
         document.getElementById("latitude").value = latitude;
         document.getElementById("longitude").value = longitude;
     });
 
-    // Prevent autocomplete from overriding input while typing
-    searchInput.addEventListener("keydown", function (event) {
+    // Prevent Google from auto-filling while typing
+    locationInput.addEventListener("keydown", function (event) {
         if (event.key === "Enter") {
             event.preventDefault();
         }
     });
 }
 
-// 🔽 Reinitialize Google Autocomplete when the form is reset or reloaded
+// Ensure autocomplete initializes correctly on form reset or reload
 document.addEventListener("DOMContentLoaded", function () {
     initAutocomplete(); // Initialize on page load
 
-    // If the form is reset (or a new form is opened), reinitialize autocomplete
+    // Reinitialize autocomplete when form is reset
     document.querySelector("form").addEventListener("reset", function () {
-        setTimeout(initAutocomplete, 500); // Delay to allow form reset
+        setTimeout(initAutocomplete, 500);
     });
 });
 </script>
-
 
 {% endblock %}

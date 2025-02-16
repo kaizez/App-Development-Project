@@ -41,11 +41,12 @@
                 <li class="nav-item">
                     <a class="nav-link" href="/dashBoardAdmin">Upload GPX/XML</a>
                 </li>
-                {% else %}
+                {% elif session.get('user_id') %}
                 <li class="nav-item">
                     <a class="nav-link" href="/dashboard">Dashboard</a>
                 </li>
                 {% endif %}
+
 
                 {% if session.get('is_admin') %}
                 <li class="nav-item">
