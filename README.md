@@ -9,9 +9,14 @@ Welcome to **EcoBike**, your go-to platform for eco-friendly biking adventures! 
 EcoBike was born out of a passion for cycling and a commitment to environmental sustainability. Our mission is to encourage more people to embrace biking as a green alternative to traditional transportation. With features like route planning, GPS tracking, and community sharing, EcoBike makes it easy for users to explore the world on two wheels while reducing their carbon footprint.
 
 **Account details**  
+format: email, password
 *Admin accounts*
-bryceang2007@gmail.com ecobke
+bryceang2007@gmail.com, ecobike
 
+*User accounts*
+user1@gmail.com, ecobike
+user2@gmail.com, ecobike
+google login: brixbot35@gmail.com
 ---
 
 ## 👥 Contributions
